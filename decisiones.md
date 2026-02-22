@@ -1,48 +1,121 @@
-# Decisiones Técnicas
+# Decisiones Tecnicas - TP04 y TP05
 
-## Stack elegido
+## 1. Stack y arquitectura base
 
 - Frontend: React + Vite + TypeScript
 - Backend: Node.js + Express + TypeScript
-- Base de datos: PostgreSQL
-- Driver DB: `pg` (sin ORM)
-- CI: GitHub Actions
+- DB: PostgreSQL
+- Driver DB: `pg`
+- Repositorio: monorepo (`/front`, `/back`)
 
-## Por qué este stack
+Motivo principal: minimizar complejidad de implementacion manteniendo separacion clara entre capas para CI/CD.
 
-1. Es simple de implementar para un TP corto.
-2. Separa claramente frontend y backend (`/front`, `/back`).
-3. PostgreSQL alinea con despliegues reales en nube.
-4. `pg` permite explicar SQL directo sin capa adicional.
+## 2. CI elegido (TP04)
 
-## Diseño del pipeline
+Herramienta: GitHub Actions
 
-Archivo: `.github/workflows/ci.yml`
+Workflow: `.github/workflows/ci.yml`
 
-- Pipeline con 3 jobs:
-  - `front-ci`
-  - `back-ci`
-  - `ci-summary`
-- `back-ci` usa un contenedor de PostgreSQL para pruebas.
-- Publicación de artefactos:
-  - `front-dist` (`front/dist`)
-  - `back-dist` (`back/dist`)
+Jobs:
 
-## Evidencias
+- `front-ci`: install, test, build, artifact (`front-dist`)
+- `back-ci`: Postgres service container, install, test, build, artifact (`back-dist`)
+- `ci-summary`: validacion final
 
-Guardar capturas en `docs/evidencias/`:
+Motivo:
 
-1. Ejecución exitosa del workflow completo.
-2. Detalle de job `front-ci` en verde.
-3. Detalle de job `back-ci` en verde.
-4. Pestaña de artefactos con `front-dist` y `back-dist`.
-5. (Opcional) historial de runs para trazabilidad.
+- YAML versionado en repo
+- Logs y artefactos visibles
+- Integracion nativa con GitHub
 
-## Riesgos y mitigaciones
+## 3. Estrategia de entornos locales
 
-- Riesgo: errores de conexión a DB en CI.
-  - Mitigación: service container de PostgreSQL + healthcheck.
-- Riesgo: diferencias de versión de Node.
-  - Mitigación: fijar Node 20 en workflow.
-- Riesgo: drift de esquema.
-  - Mitigación: creación de esquema en startup (`ensureSchema`) y tests de integración.
+Para separar QA/PROD tambien en desarrollo local:
+
+- Backend:
+  - `.env.test` -> `tasksdb_test`, `PORT=3002`
+  - `.env.prod` -> `tasksdb_prod`, `PORT=3001`
+- Frontend:
+  - `.env.test` -> `VITE_API_URL=http://localhost:3002`, `FRONTEND_PORT=5173`
+  - `.env.prod` -> `VITE_API_URL=http://localhost:3001`, `FRONTEND_PORT=5174`
+
+Decision clave: front usa puertos fijos por modo para evitar errores de CORS por puertos dinamicos.
+
+## 4. CD elegido (TP05)
+
+Plataforma cloud: Render
+
+Recursos:
+
+- QA: `front-qa`, `back-qa`, `db-qa`
+- PROD: `front-prod`, `back-prod`, `db-prod`
+
+Workflow release: `.github/workflows/release.yml`
+
+- Trigger automatico por `workflow_run` exitoso de `CI` sobre `main`
+- Trigger manual por `workflow_dispatch` (permite seleccionar `source_run_id`)
+- `Deploy QA` -> deploy back/front QA en Render + health check
+- `Deploy Production` -> deploy back/front PROD + health check
+
+### Conexion con pipeline de build
+
+El release descarga artefactos del run CI (`front-dist`, `back-dist`) usando `source_run_id` antes de desplegar, garantizando trazabilidad CI -> CD.
+
+## 5. Aprobaciones manuales y gates
+
+Aprobacion QA -> PROD implementada con GitHub Environments:
+
+- Job de produccion usa `environment: production`
+- En GitHub se configura `required reviewers`
+- El despliegue a PROD queda bloqueado hasta aprobacion
+
+Responsable definido: lider tecnico / docente (segun equipo).
+
+## 6. Health checks post-despliegue
+
+Se valida endpoint:
+
+- QA: `${BACK_QA_URL}/health`
+- PROD: `${BACK_PROD_URL}/health`
+
+El workflow falla si no obtiene `HTTP 200` en los reintentos configurados.
+
+## 7. Rollback strategy
+
+Workflow: `.github/workflows/rollback.yml`
+
+- Ejecucion manual (`workflow_dispatch`) con `target` (`qa` o `production`)
+- Re-dispara deploy en Render para el entorno seleccionado
+- Verifica health check al finalizar
+
+Objetivo: reducir tiempo de recuperacion ante despliegue defectuoso.
+
+## 8. Variables y secretos por entorno
+
+Secrets requeridos en GitHub Actions:
+
+- `RENDER_API_KEY`
+- `RENDER_SERVICE_ID_BACK_QA`
+- `RENDER_SERVICE_ID_FRONT_QA`
+- `RENDER_SERVICE_ID_BACK_PROD`
+- `RENDER_SERVICE_ID_FRONT_PROD`
+- `BACK_QA_URL`
+- `BACK_PROD_URL`
+
+Variables runtime en Render por servicio:
+
+- Backend QA/PROD: `DATABASE_URL`, `FRONTEND_URL`
+- Frontend QA/PROD: `VITE_API_URL`
+
+## 9. Evidencias a adjuntar
+
+Capturas sugeridas:
+
+1. Recursos cloud QA/PROD creados.
+2. Configuracion de variables y secrets.
+3. Run CI exitoso con artefactos.
+4. Release QA exitoso.
+5. Pantalla de aprobacion manual a PROD.
+6. Release PROD exitoso.
+7. Health checks en verde.
+8. Rollback manual exitoso.

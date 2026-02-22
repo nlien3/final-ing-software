@@ -1,6 +1,6 @@
-# TP04 - Full Stack CI con GitHub Actions
+# TP04 + TP05 - CI/CD Full Stack con GitHub Actions y Render
 
-Proyecto monorepo con frontend y backend separados:
+Aplicacion monorepo:
 
 - `front`: React + Vite + TypeScript
 - `back`: Node.js + Express + TypeScript + PostgreSQL (`pg`)
@@ -10,56 +10,99 @@ Proyecto monorepo con frontend y backend separados:
 ```text
 .
 ├── .github/workflows/ci.yml
+├── .github/workflows/release.yml
+├── .github/workflows/rollback.yml
 ├── front/
 ├── back/
 ├── decisiones.md
 └── docs/evidencias/
 ```
 
-## Prerrequisitos
+## Entornos
 
-- Node.js 20+
-- npm 10+
-- PostgreSQL 14+
+### QA
 
-## Variables de entorno
+- Front URL: `FRONT_QA_URL` (Render Static Site)
+- Back URL: `BACK_QA_URL` (Render Web Service)
+- DB: `tasksdb_test` (o PostgreSQL administrado en Render QA)
 
-Backend (`back/.env`):
+### Produccion
+
+- Front URL: `FRONT_PROD_URL` (Render Static Site)
+- Back URL: `BACK_PROD_URL` (Render Web Service)
+- DB: `tasksdb_prod` (o PostgreSQL administrado en Render PROD)
+
+## Variables de entorno locales
+
+### Backend
+
+`back/.env.test`
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tasksdb
-PORT=3001
+DATABASE_URL=postgresql://nico@localhost:5432/tasksdb_test
+PORT=3002
+FRONTEND_URL=http://localhost:5173
 ```
 
-Frontend (`front/.env`):
+`back/.env.prod`
+
+```env
+DATABASE_URL=postgresql://nico@localhost:5432/tasksdb_prod
+PORT=3001
+FRONTEND_URL=http://localhost:5174
+```
+
+### Frontend
+
+`front/.env.test`
+
+```env
+VITE_API_URL=http://localhost:3002
+FRONTEND_PORT=5173
+```
+
+`front/.env.prod`
 
 ```env
 VITE_API_URL=http://localhost:3001
+FRONTEND_PORT=5174
 ```
 
-## Ejecutar local
+## Ejecucion local
 
-### 1) Backend
+### Modo desarrollo
+
+Test:
 
 ```bash
-cd back
-npm install
-npm run dev
+cd back && npm install && npm run dev:test
+cd front && npm install && npm run dev:test
 ```
 
-API en `http://localhost:3001`
-
-### 2) Frontend
+Prod:
 
 ```bash
-cd front
-npm install
-npm run dev
+cd back && npm install && npm run dev:prod
+cd front && npm install && npm run dev:prod
 ```
 
-Frontend en `http://localhost:5173`
+### Modo build + run (simulacion release)
 
-## Endpoints
+Test:
+
+```bash
+cd back && npm install && npm run test:env && npm run build && npm run start:test
+cd front && npm install && npm run test -- --run && npm run build:test && npm run preview:test
+```
+
+Prod:
+
+```bash
+cd back && npm install && npm run build && npm run start:prod
+cd front && npm install && npm run test -- --run && npm run build:prod && npm run preview:prod
+```
+
+## Endpoints backend
 
 - `GET /health`
 - `GET /tasks`
@@ -67,23 +110,80 @@ Frontend en `http://localhost:5173`
 - `PATCH /tasks/:id`
 - `DELETE /tasks/:id`
 
-## Pipeline CI (GitHub Actions)
+## CI (TP04)
 
-Archivo: `.github/workflows/ci.yml`
+Workflow: `.github/workflows/ci.yml`
 
-Trigger:
+- Trigger: `push` y `pull_request` a `main`
+- Jobs: `front-ci`, `back-ci`, `ci-summary`
+- Publica artefactos:
+  - `front-dist`
+  - `back-dist`
 
-- `push` a `main`
-- `pull_request` a `main`
+## CD (TP05)
 
-Jobs:
+### 1) Workflow de release
 
-- `front-ci`: instala dependencias, testea y build de frontend, publica artefacto `front-dist`
-- `back-ci`: levanta PostgreSQL en service container, testea y build de backend, publica artefacto `back-dist`
-- `ci-summary`: valida éxito global
+Workflow: `.github/workflows/release.yml`
 
-## Puertos y URLs
+- Trigger automatico: cuando finaliza exitosamente `CI` en `main`.
+- Trigger manual: `workflow_dispatch` con `source_run_id`.
+- Stages:
+  1. `Deploy QA`
+  2. `Deploy Production` (con aprobacion manual via Environment protection)
+- Health checks:
+  - QA: `${BACK_QA_URL}/health`
+  - PROD: `${BACK_PROD_URL}/health`
 
-- Front: `http://localhost:5173`
-- Back: `http://localhost:3001`
-- PostgreSQL local: `localhost:5432`
+### 2) Workflow de rollback
+
+Workflow: `.github/workflows/rollback.yml`
+
+- Trigger manual con input `target` (`qa` o `production`)
+- Re-dispara deploy en Render para el entorno seleccionado
+- Ejecuta health check post-rollback
+
+## Secrets necesarios en GitHub
+
+Configurar en `Settings -> Secrets and variables -> Actions`:
+
+- `RENDER_API_KEY`
+- `RENDER_SERVICE_ID_BACK_QA`
+- `RENDER_SERVICE_ID_FRONT_QA`
+- `RENDER_SERVICE_ID_BACK_PROD`
+- `RENDER_SERVICE_ID_FRONT_PROD`
+- `BACK_QA_URL`
+- `BACK_PROD_URL`
+
+## Aprobacion manual a produccion
+
+Configurar en `Settings -> Environments -> production`:
+
+- Required reviewers habilitado
+- Al menos 1 aprobador (por ejemplo: docente/lider tecnico)
+
+Con esto, el job `Deploy Production` queda bloqueado hasta aprobacion.
+
+## Recursos cloud (Render)
+
+Minimo recomendado:
+
+- `back-qa` (Web Service)
+- `front-qa` (Static Site)
+- `db-qa` (PostgreSQL)
+- `back-prod` (Web Service)
+- `front-prod` (Static Site)
+- `db-prod` (PostgreSQL)
+
+## Evidencias a entregar
+
+Subir capturas en `docs/evidencias/`:
+
+1. Recursos QA y PROD creados en Render.
+2. Variables por entorno configuradas.
+3. Run de `CI` exitoso con artefactos.
+4. Run de `release.yml` con `Deploy QA` exitoso.
+5. Pantalla de aprobacion manual de `production`.
+6. `Deploy Production` exitoso.
+7. Health checks OK.
+8. Run de `rollback.yml` exitoso.

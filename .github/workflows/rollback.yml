@@ -1,0 +1,57 @@
+name: Rollback Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Entorno a re-desplegar"
+        required: true
+        type: choice
+        options:
+          - qa
+          - production
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}
+    steps:
+      - name: Trigger Render redeploy on selected environment
+        run: |
+          if [ "${{ inputs.target }}" = "qa" ]; then
+            BACK_ID="${{ secrets.RENDER_SERVICE_ID_BACK_QA }}"
+            FRONT_ID="${{ secrets.RENDER_SERVICE_ID_FRONT_QA }}"
+            HEALTH_URL="${{ secrets.BACK_QA_URL }}"
+          else
+            BACK_ID="${{ secrets.RENDER_SERVICE_ID_BACK_PROD }}"
+            FRONT_ID="${{ secrets.RENDER_SERVICE_ID_FRONT_PROD }}"
+            HEALTH_URL="${{ secrets.BACK_PROD_URL }}"
+          fi
+
+          curl --fail --show-error --silent \
+            -X POST "https://api.render.com/v1/services/${BACK_ID}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+
+          curl --fail --show-error --silent \
+            -X POST "https://api.render.com/v1/services/${FRONT_ID}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+
+          for i in {1..20}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "${HEALTH_URL}/health" || true)
+            if [ "$code" = "200" ]; then
+              echo "Rollback health check OK"
+              exit 0
+            fi
+            echo "Waiting rollback readiness (attempt $i), code=$code"
+            sleep 15
+          done
+
+          echo "Rollback health check failed"
+          exit 1
