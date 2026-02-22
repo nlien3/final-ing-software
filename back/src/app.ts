@@ -1,8 +1,8 @@
 import cors from 'cors';
 import express from 'express';
-import type { Pool } from 'pg';
+import { AppError, TasksService } from './tasks/tasks.service';
 
-export function createApp(pool: Pool) {
+export function createApp(tasksService: TasksService) {
   const app = express();
   const allowedOrigins = (
     process.env.FRONTEND_URLS ??
@@ -17,11 +17,7 @@ export function createApp(pool: Pool) {
   app.use(
     cors({
       origin(origin, callback) {
-        if (
-          !origin ||
-          allowedOrigins.includes(origin) ||
-          localhostOriginPattern.test(origin)
-        ) {
+        if (!origin || allowedOrigins.includes(origin) || localhostOriginPattern.test(origin)) {
           callback(null, true);
           return;
         }
@@ -37,10 +33,8 @@ export function createApp(pool: Pool) {
 
   app.get('/tasks', async (_req, res, next) => {
     try {
-      const result = await pool.query(
-        'SELECT id, title, description, done, created_at AS "createdAt" FROM tasks ORDER BY created_at DESC'
-      );
-      res.status(200).json(result.rows);
+      const tasks = await tasksService.listTasks();
+      res.status(200).json(tasks);
     } catch (error) {
       next(error);
     }
@@ -48,30 +42,11 @@ export function createApp(pool: Pool) {
 
   app.post('/tasks', async (req, res, next) => {
     try {
-      const title = String(req.body?.title ?? '').trim();
-      const description = String(req.body?.description ?? '').trim();
-
-      if (!title || title.length > 120) {
-        res.status(400).json({ error: 'title is required and must be <= 120 chars' });
-        return;
-      }
-
-      if (!description) {
-        res.status(400).json({ error: 'description is required' });
-        return;
-      }
-
-      if (description.length > 1000) {
-        res.status(400).json({ error: 'description must be <= 1000 chars' });
-        return;
-      }
-
-      const result = await pool.query(
-        'INSERT INTO tasks (title, description) VALUES ($1, $2) RETURNING id, title, description, done, created_at AS "createdAt"',
-        [title, description]
-      );
-
-      res.status(201).json(result.rows[0]);
+      const task = await tasksService.createTask({
+        title: req.body?.title,
+        description: req.body?.description
+      });
+      res.status(201).json(task);
     } catch (error) {
       next(error);
     }
@@ -79,64 +54,12 @@ export function createApp(pool: Pool) {
 
   app.patch('/tasks/:id', async (req, res, next) => {
     try {
-      const id = Number(req.params.id);
-      const title = req.body?.title;
-      const description = req.body?.description;
-      const done = req.body?.done;
-
-      if (!Number.isInteger(id)) {
-        res.status(400).json({ error: 'invalid payload' });
-        return;
-      }
-
-      const updates: string[] = [];
-      const values: unknown[] = [];
-
-      if (title !== undefined) {
-        if (typeof title !== 'string' || !title.trim() || title.trim().length > 120) {
-          res.status(400).json({ error: 'title must be 1..120 chars' });
-          return;
-        }
-        updates.push(`title = $${values.length + 1}`);
-        values.push(title.trim());
-      }
-
-      if (description !== undefined) {
-        if (typeof description !== 'string' || !description.trim() || description.trim().length > 1000) {
-          res.status(400).json({ error: 'description must be 1..1000 chars' });
-          return;
-        }
-        updates.push(`description = $${values.length + 1}`);
-        values.push(description.trim());
-      }
-
-      if (done !== undefined) {
-        if (typeof done !== 'boolean') {
-          res.status(400).json({ error: 'done must be boolean' });
-          return;
-        }
-        updates.push(`done = $${values.length + 1}`);
-        values.push(done);
-      }
-
-      if (updates.length === 0) {
-        res.status(400).json({ error: 'at least one field is required: title, description, done' });
-        return;
-      }
-
-      values.push(id);
-      const idPosition = values.length;
-      const result = await pool.query(
-        `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${idPosition} RETURNING id, title, description, done, created_at AS "createdAt"`,
-        values
-      );
-
-      if (result.rowCount === 0) {
-        res.status(404).json({ error: 'task not found' });
-        return;
-      }
-
-      res.status(200).json(result.rows[0]);
+      const task = await tasksService.updateTask(Number(req.params.id), {
+        title: req.body?.title,
+        description: req.body?.description,
+        done: req.body?.done
+      });
+      res.status(200).json(task);
     } catch (error) {
       next(error);
     }
@@ -144,20 +67,7 @@ export function createApp(pool: Pool) {
 
   app.delete('/tasks/:id', async (req, res, next) => {
     try {
-      const id = Number(req.params.id);
-
-      if (!Number.isInteger(id)) {
-        res.status(400).json({ error: 'invalid id' });
-        return;
-      }
-
-      const result = await pool.query('DELETE FROM tasks WHERE id = $1', [id]);
-
-      if (result.rowCount === 0) {
-        res.status(404).json({ error: 'task not found' });
-        return;
-      }
-
+      await tasksService.deleteTask(Number(req.params.id));
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -165,6 +75,11 @@ export function createApp(pool: Pool) {
   });
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+
     console.error(error);
     res.status(500).json({ error: 'internal server error' });
   });

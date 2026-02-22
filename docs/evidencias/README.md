@@ -18,3 +18,11 @@ Guardar aqui las capturas requeridas por la catedra.
 - `14-release-prod-success.png`
 - `15-health-check-qa-prod.png`
 - `16-rollback-run-success.png`
+
+## TP06 (Testing)
+
+- `20-back-unit-tests-success.png`
+- `21-back-integration-tests-success.png`
+- `22-front-tests-success.png`
+- `23-ci-tests-stage-success.png`
+- `24-test-files-and-mocks.png`

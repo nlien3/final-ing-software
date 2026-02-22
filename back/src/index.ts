@@ -1,8 +1,12 @@
 import { createApp } from './app';
 import { ensureSchema, pool } from './db';
+import { PgTasksRepository } from './tasks/tasks.repository';
+import { TasksService } from './tasks/tasks.service';
 
 const port = Number(process.env.PORT ?? 3001);
-const app = createApp(pool);
+const repository = new PgTasksRepository(pool);
+const tasksService = new TasksService(repository);
+const app = createApp(tasksService);
 
 async function main() {
   try {

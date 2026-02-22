@@ -119,3 +119,51 @@ Capturas sugeridas:
 6. Release PROD exitoso.
 7. Health checks en verde.
 8. Rollback manual exitoso.
+
+## 10. Estrategia de testing (TP06)
+
+### Frameworks elegidos
+
+- Backend: `Vitest` para pruebas unitarias, `Supertest` para pruebas HTTP de integracion.
+- Frontend: `Vitest` + `Testing Library`.
+
+Justificacion:
+
+- Misma herramienta principal (`Vitest`) en front y back simplifica mantenimiento.
+- Permite mocking nativo (`vi.fn`, `vi.mocked`) y buena velocidad de ejecucion.
+
+### Arquitectura para habilitar unit tests reales
+
+Se separo backend en:
+
+- `TasksRepository` (acceso a datos)
+- `TasksService` (reglas de negocio)
+- `app` (capa HTTP)
+
+Esto permite probar la logica de negocio sin depender de PostgreSQL real.
+
+### Mocking implementado
+
+- Backend unit:
+  - `tasks.service.unit.test.ts`: mock de `TasksRepository`.
+- Backend integracion:
+  - `app.test.ts`: pruebas HTTP con `Supertest` contra app real (usando PostgreSQL de test).
+- Frontend unit:
+  - `api.test.ts`: mock de `fetch` para respuestas 200/204/400.
+  - `App.test.tsx`: mock de `fetch` para flujos de componente.
+
+### Casos relevantes cubiertos
+
+- Validaciones de negocio (titulo/descripcion obligatorios y longitudes).
+- Manejo de errores esperados (`400`, `404`) y errores inesperados (`500`).
+- Flujos de UI (crear, editar, eliminar, filtrar).
+- Edge cases de API (`204 No Content`, errores con mensaje de backend).
+
+### Integracion a pipeline
+
+En CI (`ci.yml`) backend ejecuta:
+
+- `npm run test:unit`
+- `npm run test:integration`
+
+Y frontend ejecuta tests + build, asegurando validacion automatica en cada push/PR.

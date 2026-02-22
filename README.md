@@ -187,3 +187,48 @@ Subir capturas en `docs/evidencias/`:
 6. `Deploy Production` exitoso.
 7. Health checks OK.
 8. Run de `rollback.yml` exitoso.
+
+## TP06 - Pruebas Unitarias
+
+Frameworks elegidos:
+
+- Backend: `Vitest` + `Supertest`
+- Frontend: `Vitest` + `@testing-library/react`
+- Mocks/stubs:
+  - backend: mocks de `TasksRepository` en unit tests
+  - frontend: mock de `fetch` para API y componentes
+
+### Comandos de tests backend
+
+Unitarios (sin DB):
+
+```bash
+cd back && npm install && npm run test:unit
+```
+
+Integracion (con DB):
+
+```bash
+cd back && npm install && npm run test:integration
+```
+
+Integracion contra entorno test local:
+
+```bash
+cd back && npm install && npm run test:env
+```
+
+### Comandos de tests frontend
+
+```bash
+cd front && npm install && npm run test -- --run
+```
+
+### Ejecucion en CI
+
+En `.github/workflows/ci.yml` se ejecuta automaticamente:
+
+- Frontend tests + build
+- Backend `test:unit` + `test:integration` + build
+
+Con esto las pruebas quedan integradas en el pipeline de CI/CD.
