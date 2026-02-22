@@ -26,3 +26,5 @@ Guardar aqui las capturas requeridas por la catedra.
 - `22-front-tests-success.png`
 - `23-ci-tests-stage-success.png`
 - `24-test-files-and-mocks.png`
+- `25-ci-coverage-summary.png`
+- `26-ci-coverage-artifacts.png`

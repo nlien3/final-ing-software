@@ -30,7 +30,7 @@ jobs:
         run: npm install
 
       - name: Prepare test reports directory
-        run: mkdir -p test-results
+        run: mkdir -p test-results coverage
 
       - name: Run tests with JUnit report
         run: >
@@ -39,6 +39,11 @@ jobs:
           --reporter=github-actions
           --reporter=junit
           --outputFile.junit=./test-results/front-junit.xml
+          --coverage
+          --coverage.reporter=text-summary
+          --coverage.reporter=html
+          --coverage.reporter=json-summary
+          --coverage.reportsDirectory=./coverage
 
       - name: Upload front test report
         if: always()
@@ -46,6 +51,14 @@ jobs:
         with:
           name: front-test-report
           path: front/test-results/front-junit.xml
+          if-no-files-found: warn
+
+      - name: Upload front coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: front-coverage-report
+          path: front/coverage
           if-no-files-found: warn
 
       - name: Front test summary
@@ -76,6 +89,30 @@ jobs:
             echo "| $TESTS | $FAILURES | $ERRORS | $SKIPPED |"
             echo ""
             echo "Reporte: \`front/test-results/front-junit.xml\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Front coverage summary
+        if: always()
+        run: |
+          COVERAGE_FILE="coverage/coverage-summary.json"
+          if [ ! -f "$COVERAGE_FILE" ]; then
+            echo "### Front Coverage" >> "$GITHUB_STEP_SUMMARY"
+            echo "No se encontro coverage-summary.json." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          read -r LINES FUNCTIONS BRANCHES STATEMENTS <<EOF
+          $(node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).total;const fmt=(n)=>Number(n||0).toFixed(2);process.stdout.write([fmt(t.lines.pct),fmt(t.functions.pct),fmt(t.branches.pct),fmt(t.statements.pct)].join(' '));" "$COVERAGE_FILE")
+          EOF
+
+          {
+            echo "### Front Coverage"
+            echo ""
+            echo "| lines | functions | branches | statements |"
+            echo "| ---: | ---: | ---: | ---: |"
+            echo "| ${LINES}% | ${FUNCTIONS}% | ${BRANCHES}% | ${STATEMENTS}% |"
+            echo ""
+            echo "Reporte HTML: artifact \`front-coverage-report\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
@@ -123,7 +160,7 @@ jobs:
         run: npm install
 
       - name: Prepare test reports directory
-        run: mkdir -p test-results
+        run: mkdir -p test-results coverage/unit coverage/integration
 
       - name: Run unit tests with JUnit report
         run: >
@@ -132,6 +169,11 @@ jobs:
           --reporter=github-actions
           --reporter=junit
           --outputFile.junit=./test-results/back-unit-junit.xml
+          --coverage
+          --coverage.reporter=text-summary
+          --coverage.reporter=html
+          --coverage.reporter=json-summary
+          --coverage.reportsDirectory=./coverage/unit
 
       - name: Run integration tests with JUnit report
         run: >
@@ -140,6 +182,11 @@ jobs:
           --reporter=github-actions
           --reporter=junit
           --outputFile.junit=./test-results/back-integration-junit.xml
+          --coverage
+          --coverage.reporter=text-summary
+          --coverage.reporter=html
+          --coverage.reporter=json-summary
+          --coverage.reportsDirectory=./coverage/integration
 
       - name: Upload back test reports
         if: always()
@@ -149,6 +196,16 @@ jobs:
           path: |
             back/test-results/back-unit-junit.xml
             back/test-results/back-integration-junit.xml
+          if-no-files-found: warn
+
+      - name: Upload back coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: back-coverage-report
+          path: |
+            back/coverage/unit
+            back/coverage/integration
           if-no-files-found: warn
 
       - name: Back test summary
@@ -192,6 +249,40 @@ jobs:
             echo "Reportes:"
             echo "- \`back/test-results/back-unit-junit.xml\`"
             echo "- \`back/test-results/back-integration-junit.xml\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Back coverage summary
+        if: always()
+        run: |
+          summarize_coverage() {
+            local label="$1"
+            local coverage_file="$2"
+
+            if [ ! -f "$coverage_file" ]; then
+              echo "| $label | n/a | n/a | n/a | n/a |" >> "$GITHUB_STEP_SUMMARY"
+              return
+            fi
+
+            read -r lines functions branches statements <<EOF
+            $(node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).total;const fmt=(n)=>Number(n||0).toFixed(2);process.stdout.write([fmt(t.lines.pct),fmt(t.functions.pct),fmt(t.branches.pct),fmt(t.statements.pct)].join(' '));" "$coverage_file")
+            EOF
+
+            echo "| $label | ${lines}% | ${functions}% | ${branches}% | ${statements}% |" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          {
+            echo "### Back Coverage"
+            echo ""
+            echo "| suite | lines | functions | branches | statements |"
+            echo "| --- | ---: | ---: | ---: | ---: |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          summarize_coverage "unit" "coverage/unit/coverage-summary.json"
+          summarize_coverage "integration" "coverage/integration/coverage-summary.json"
+
+          {
+            echo ""
+            echo "Reporte HTML: artifact \`back-coverage-report\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
