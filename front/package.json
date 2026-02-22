@@ -15,7 +15,9 @@
     "preview:prod": "vite preview --mode prod --outDir dist-prod",
     "test": "vitest",
     "test:unit": "vitest run src/api.test.ts",
-    "test:ui": "vitest run src/App.test.tsx"
+    "test:ui": "vitest run src/App.test.tsx",
+    "e2e": "cypress run",
+    "e2e:open": "cypress open"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -28,6 +30,7 @@
     "@testing-library/user-event": "^14.5.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "cypress": "^13.17.0",
     "jsdom": "^28.1.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",

@@ -176,3 +176,52 @@ Tambien se agrego cobertura automatica en CI usando Vitest coverage (`v8`):
 - Front: cobertura global del job de frontend.
 - Back: cobertura separada para unit e integration.
 - El run publica porcentajes (lines/functions/branches/statements) y estado de tests en `GITHUB_STEP_SUMMARY`.
+
+## 11. Calidad de codigo integral (TP07)
+
+### Objetivo
+
+Integrar coverage, analisis estatico y pruebas E2E en un unico pipeline con quality gates reales.
+
+### Coverage y quality gates
+
+- Frontend: tests con Vitest + coverage (`json-summary`, `lcov`, `html`).
+- Backend: unit e integration con coverage por suite.
+- Gate aplicado:
+  - Frontend `lines >= 70%`
+  - Backend `lines >= 70%` en `unit` e `integration`
+
+Si no cumple, el job falla y bloquea el deploy (porque `release.yml` depende de CI exitoso).
+
+### Analisis estatico
+
+Herramienta: SonarCloud.
+
+Implementacion:
+
+- `sonar-project.properties` en raiz del repo.
+- Job `sonarcloud-ci` en `ci.yml`.
+- Scan con `SonarSource/sonarqube-scan-action`.
+- Quality gate de Sonar habilitado con espera activa:
+  - `sonar.qualitygate.wait=true`
+
+### Pruebas E2E
+
+Herramienta: Cypress.
+
+Casos implementados:
+
+1. Crear tarea (flujo completo desde UI).
+2. Actualizar tarea existente.
+3. Validar manejo de error front-back con payload rechazado por backend.
+
+Estas pruebas se ejecutan en el job `e2e-ci` levantando back + front y usando PostgreSQL service container.
+
+### Criterio de bloqueo final de pipeline
+
+El CI queda en rojo (y bloquea release) si ocurre cualquiera de estos casos:
+
+- coverage < 70,
+- SonarCloud quality gate fail,
+- falla Cypress E2E,
+- falla build/test front o back.

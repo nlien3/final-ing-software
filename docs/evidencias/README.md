@@ -28,3 +28,13 @@ Guardar aqui las capturas requeridas por la catedra.
 - `24-test-files-and-mocks.png`
 - `25-ci-coverage-summary.png`
 - `26-ci-coverage-artifacts.png`
+
+## TP07 (Coverage + SonarCloud + E2E)
+
+- `30-ci-coverage-gate-pass.png`
+- `31-ci-coverage-gate-fail.png`
+- `32-sonarcloud-dashboard.png`
+- `33-sonarcloud-quality-gate.png`
+- `34-cypress-e2e-run-success.png`
+- `35-cypress-e2e-fail-example.png`
+- `36-ci-full-pipeline-quality-gates.png`

@@ -1,4 +1,4 @@
-# TP04 + TP05 + TP06 - CI/CD + Testing Full Stack con GitHub Actions y Render
+# TP04 + TP05 + TP06 + TP07 - CI/CD + Calidad de Codigo Full Stack
 
 Aplicacion monorepo:
 
@@ -12,6 +12,7 @@ Aplicacion monorepo:
 ├── .github/workflows/ci.yml
 ├── .github/workflows/release.yml
 ├── .github/workflows/rollback.yml
+├── sonar-project.properties
 ├── front/
 ├── back/
 ├── decisiones.md
@@ -115,7 +116,7 @@ cd front && npm install && npm run test -- --run && npm run build:prod && npm ru
 Workflow: `.github/workflows/ci.yml`
 
 - Trigger: `push` y `pull_request` a `main`
-- Jobs: `front-ci`, `back-ci`, `ci-summary`
+- Jobs: `front-ci`, `back-ci`, `e2e-ci`, `sonarcloud-ci`, `ci-summary`
 - Publica artefactos:
   - `front-dist`
   - `back-dist`
@@ -248,3 +249,60 @@ En `.github/workflows/ci.yml` se ejecuta automaticamente:
   - Coverage: porcentaje de lines/functions/branches/statements.
 
 Con esto las pruebas quedan integradas en el pipeline de CI/CD.
+
+## TP07 - Coverage + SonarCloud + Cypress E2E
+
+### Objetivo implementado
+
+- Coverage en front y back con quality gate.
+- Analisis estatico con SonarCloud y quality gate.
+- Pruebas end-to-end con Cypress cubriendo flujos criticos.
+- Todo integrado en un pipeline unico que bloquea despliegues defectuosos.
+
+### Nuevos prerequisitos
+
+#### SonarCloud (GitHub Secrets)
+
+Configurar en `Settings -> Secrets and variables -> Actions`:
+
+- `SONAR_TOKEN`
+- `SONAR_ORGANIZATION`
+- `SONAR_PROJECT_KEY`
+
+#### Cypress
+
+Instalar dependencias frontend:
+
+```bash
+cd front && npm install
+```
+
+### Comandos utiles TP07
+
+Coverage front/back en local:
+
+```bash
+cd front && npm run test -- --run --coverage
+cd ../back && npm run test:unit -- --coverage && npm run test:integration -- --coverage
+```
+
+Cypress E2E local (requiere back + front corriendo):
+
+```bash
+cd front && npm run e2e
+```
+
+### Quality gates configurados
+
+El pipeline bloquea si:
+
+1. Cobertura de lineas < 70% (frontend).
+2. Cobertura de lineas < 70% en unit o integration (backend).
+3. Falla cualquier test E2E (Cypress).
+4. SonarCloud quality gate falla.
+
+### Casos E2E implementados (Cypress)
+
+- Crear tarea completa desde UI.
+- Editar tarea existente y validar cambios.
+- Forzar error de backend y verificar manejo de error en frontend.

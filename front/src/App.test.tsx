@@ -174,4 +174,73 @@ describe('App', () => {
     expect(screen.queryByText('Primera tarea')).not.toBeInTheDocument();
     expect(screen.getByText('Tarea completada')).toBeInTheDocument();
   });
+
+  it('shows validation error when creating task with blank fields', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Primera tarea')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('task-title'), { target: { value: '   ' } });
+    fireEvent.change(screen.getByLabelText('task-description'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByText('Agregar tarea'));
+
+    expect(screen.getByText('El titulo y la descripcion son obligatorios')).toBeInTheDocument();
+  });
+
+  it('toggles task completion from checkbox', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Primera tarea')).toBeInTheDocument();
+    });
+
+    const checkbox = screen.getAllByRole('checkbox')[0];
+    fireEvent.click(checkbox);
+
+    await waitFor(() => {
+      expect(screen.getByText('Primera tarea')).toHaveClass('done');
+    });
+  });
+
+  it('opens discard changes confirmation and exits edit without saving', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: 'Editar tarea' }).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Editar tarea' })[0]);
+    fireEvent.change(screen.getByLabelText('modal-edit-title'), {
+      target: { value: 'Cambio sin guardar' }
+    });
+    fireEvent.click(screen.getByText('Cancelar'));
+
+    expect(screen.getByText('Descartar cambios')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Salir sin guardar'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Descartar cambios')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('modal-edit-title')).not.toBeInTheDocument();
+      expect(screen.getByText('Primera tarea')).toBeInTheDocument();
+    });
+  });
+
+  it('closes delete modal when pressing Escape', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: 'Eliminar tarea' }).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Eliminar tarea' })[0]);
+    expect(screen.getByText('Eliminar tarea')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Eliminar tarea')).not.toBeInTheDocument();
+    });
+  });
 });

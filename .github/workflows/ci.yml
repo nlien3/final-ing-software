@@ -9,8 +9,12 @@ on:
 permissions:
   contents: read
 
+env:
+  COVERAGE_MIN_LINES: '70'
+
 jobs:
   front-ci:
+    name: Frontend (tests + coverage + gate)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -23,27 +27,26 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: front/package.json
+          cache: npm
+          cache-dependency-path: front/package-lock.json
 
       - name: Install dependencies
         run: npm install
 
-      - name: Prepare test reports directory
-        run: mkdir -p test-results coverage
-
-      - name: Run tests with JUnit report
-        run: >
-          npm run test -- --run
-          --reporter=default
-          --reporter=github-actions
-          --reporter=junit
-          --outputFile.junit=./test-results/front-junit.xml
-          --coverage
-          --coverage.reporter=text-summary
-          --coverage.reporter=html
-          --coverage.reporter=json-summary
-          --coverage.reportsDirectory=./coverage
+      - name: Run tests with coverage + JUnit
+        run: |
+          mkdir -p test-results coverage
+          npm run test -- --run \
+            --reporter=default \
+            --reporter=github-actions \
+            --reporter=junit \
+            --outputFile.junit=./test-results/front-junit.xml \
+            --coverage \
+            --coverage.reporter=text-summary \
+            --coverage.reporter=html \
+            --coverage.reporter=json-summary \
+            --coverage.reporter=lcov \
+            --coverage.reportsDirectory=./coverage
 
       - name: Resumen de pruebas Frontend
         if: always()
@@ -75,6 +78,7 @@ jobs:
 
           TEST_CASES=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const names=[];const re=/<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/g;for(const m of xml.matchAll(re)){const attrs=m[1]||m[3]||"";const name=(attrs.match(/\bname="([^"]*)"/)||[])[1]||"";const cls=(attrs.match(/\bclassname="([^"]*)"/)||[])[1]||"";if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$REPORT_FILE" || true)
           FAILED_TEST_CASES=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const failed=[];const re=/<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/g;for(const m of xml.matchAll(re)){const attrs=m[1]||m[3]||"";const body=m[2]||"";const name=(attrs.match(/\bname="([^"]*)"/)||[])[1]||"";const cls=(attrs.match(/\bclassname="([^"]*)"/)||[])[1]||"";if(!name)continue;if(/<(failure|error)\b/.test(body))failed.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(failed.join("\n"));' "$REPORT_FILE" || true)
+
           if [ -n "$TEST_CASES" ]; then
             {
               echo ""
@@ -99,14 +103,12 @@ jobs:
             echo "- Ninguna" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Resumen de cobertura Frontend
-        if: always()
+      - name: Resumen y quality gate de cobertura Frontend
         run: |
           COVERAGE_FILE="coverage/coverage-summary.json"
           if [ ! -f "$COVERAGE_FILE" ]; then
-            echo "### Cobertura Frontend" >> "$GITHUB_STEP_SUMMARY"
-            echo "No se encontro coverage-summary.json." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            echo "coverage-summary.json no encontrado" >&2
+            exit 1
           fi
 
           METRICS=$(node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).total;const fmt=(n)=>Number(n||0).toFixed(2);process.stdout.write([fmt(t.lines.pct),fmt(t.functions.pct),fmt(t.branches.pct),fmt(t.statements.pct)].join(' '));" "$COVERAGE_FILE")
@@ -120,6 +122,13 @@ jobs:
             echo "| ${LINES}% | ${FUNCTIONS}% | ${BRANCHES}% | ${STATEMENTS}% |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+          node -e "const lines=Number(process.argv[1]); const min=Number(process.argv[2]); if(lines<min){console.error(`Coverage gate FAIL front: ${lines.toFixed(2)}% < ${min}%`); process.exit(1)} console.log(`Coverage gate OK front: ${lines.toFixed(2)}% >= ${min}%`);" "$LINES" "$COVERAGE_MIN_LINES"
+
+          {
+            echo ""
+            echo "Gate cobertura frontend (lineas >= ${COVERAGE_MIN_LINES}%): OK"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build
         run: npm run build
 
@@ -130,6 +139,7 @@ jobs:
           path: front/dist
 
   back-ci:
+    name: Backend (unit + integration + coverage + gate)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -158,40 +168,40 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: back/package.json
+          cache: npm
+          cache-dependency-path: back/package-lock.json
 
       - name: Install dependencies
         run: npm install
 
-      - name: Prepare test reports directory
-        run: mkdir -p test-results coverage/unit coverage/integration
+      - name: Run unit tests with coverage + JUnit
+        run: |
+          mkdir -p test-results coverage/unit coverage/integration
+          npm run test:unit -- \
+            --reporter=default \
+            --reporter=github-actions \
+            --reporter=junit \
+            --outputFile.junit=./test-results/back-unit-junit.xml \
+            --coverage \
+            --coverage.reporter=text-summary \
+            --coverage.reporter=html \
+            --coverage.reporter=json-summary \
+            --coverage.reporter=lcov \
+            --coverage.reportsDirectory=./coverage/unit
 
-      - name: Run unit tests with JUnit report
-        run: >
-          npm run test:unit --
-          --reporter=default
-          --reporter=github-actions
-          --reporter=junit
-          --outputFile.junit=./test-results/back-unit-junit.xml
-          --coverage
-          --coverage.reporter=text-summary
-          --coverage.reporter=html
-          --coverage.reporter=json-summary
-          --coverage.reportsDirectory=./coverage/unit
-
-      - name: Run integration tests with JUnit report
-        run: >
-          npm run test:integration --
-          --reporter=default
-          --reporter=github-actions
-          --reporter=junit
-          --outputFile.junit=./test-results/back-integration-junit.xml
-          --coverage
-          --coverage.reporter=text-summary
-          --coverage.reporter=html
-          --coverage.reporter=json-summary
-          --coverage.reportsDirectory=./coverage/integration
+      - name: Run integration tests with coverage + JUnit
+        run: |
+          npm run test:integration -- \
+            --reporter=default \
+            --reporter=github-actions \
+            --reporter=junit \
+            --outputFile.junit=./test-results/back-integration-junit.xml \
+            --coverage \
+            --coverage.reporter=text-summary \
+            --coverage.reporter=html \
+            --coverage.reporter=json-summary \
+            --coverage.reporter=lcov \
+            --coverage.reportsDirectory=./coverage/integration
 
       - name: Resumen de pruebas Backend
         if: always()
@@ -282,33 +292,37 @@ jobs:
           append_failed_case_list "unit" "test-results/back-unit-junit.xml"
           append_failed_case_list "integration" "test-results/back-integration-junit.xml"
 
-      - name: Resumen de cobertura Backend
-        if: always()
+      - name: Resumen y quality gate de cobertura Backend
         run: |
-          summarize_coverage() {
-            local label="$1"
-            local coverage_file="$2"
+          UNIT_FILE="coverage/unit/coverage-summary.json"
+          INTEGRATION_FILE="coverage/integration/coverage-summary.json"
 
-            if [ ! -f "$coverage_file" ]; then
-              echo "| $label | n/a | n/a | n/a | n/a |" >> "$GITHUB_STEP_SUMMARY"
-              return
-            fi
+          if [ ! -f "$UNIT_FILE" ] || [ ! -f "$INTEGRATION_FILE" ]; then
+            echo "coverage-summary.json faltante en backend" >&2
+            exit 1
+          fi
 
-            metrics=$(node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).total;const fmt=(n)=>Number(n||0).toFixed(2);process.stdout.write([fmt(t.lines.pct),fmt(t.functions.pct),fmt(t.branches.pct),fmt(t.statements.pct)].join(' '));" "$coverage_file")
-            IFS=' ' read -r lines functions branches statements <<< "$metrics"
+          UNIT_METRICS=$(node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).total;const fmt=(n)=>Number(n||0).toFixed(2);process.stdout.write([fmt(t.lines.pct),fmt(t.functions.pct),fmt(t.branches.pct),fmt(t.statements.pct)].join(' '));" "$UNIT_FILE")
+          INT_METRICS=$(node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).total;const fmt=(n)=>Number(n||0).toFixed(2);process.stdout.write([fmt(t.lines.pct),fmt(t.functions.pct),fmt(t.branches.pct),fmt(t.statements.pct)].join(' '));" "$INTEGRATION_FILE")
 
-            echo "| $label | ${lines}% | ${functions}% | ${branches}% | ${statements}% |" >> "$GITHUB_STEP_SUMMARY"
-          }
+          IFS=' ' read -r UNIT_LINES UNIT_FUNCTIONS UNIT_BRANCHES UNIT_STATEMENTS <<< "$UNIT_METRICS"
+          IFS=' ' read -r INT_LINES INT_FUNCTIONS INT_BRANCHES INT_STATEMENTS <<< "$INT_METRICS"
 
           {
             echo "### Cobertura Backend"
             echo ""
             echo "| suite | lineas | funciones | ramas | sentencias |"
             echo "| --- | ---: | ---: | ---: | ---: |"
+            echo "| unit | ${UNIT_LINES}% | ${UNIT_FUNCTIONS}% | ${UNIT_BRANCHES}% | ${UNIT_STATEMENTS}% |"
+            echo "| integration | ${INT_LINES}% | ${INT_FUNCTIONS}% | ${INT_BRANCHES}% | ${INT_STATEMENTS}% |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          summarize_coverage "unit" "coverage/unit/coverage-summary.json"
-          summarize_coverage "integration" "coverage/integration/coverage-summary.json"
+          node -e "const u=Number(process.argv[1]); const i=Number(process.argv[2]); const min=Number(process.argv[3]); if(u<min||i<min){console.error(`Coverage gate FAIL back: unit=${u.toFixed(2)}% integration=${i.toFixed(2)}% (min ${min}%)`); process.exit(1)} console.log(`Coverage gate OK back: unit=${u.toFixed(2)}% integration=${i.toFixed(2)}% >= ${min}%`);" "$UNIT_LINES" "$INT_LINES" "$COVERAGE_MIN_LINES"
+
+          {
+            echo ""
+            echo "Gate cobertura backend (lineas >= ${COVERAGE_MIN_LINES}% en unit e integration): OK"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
         run: npm run build
@@ -319,9 +333,182 @@ jobs:
           name: back-dist
           path: back/dist
 
-  ci-summary:
+  e2e-ci:
+    name: E2E (Cypress front-back)
+    runs-on: ubuntu-latest
+    needs: [front-ci, back-ci]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tasksdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d tasksdb"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install --prefix back
+          npm install --prefix front
+
+      - name: Build backend
+        run: npm run build --prefix back
+
+      - name: Start backend (test)
+        run: |
+          PORT=3002 \
+          FRONTEND_URL=http://localhost:4173 \
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tasksdb \
+          nohup npm run start --prefix back > /tmp/back-e2e.log 2>&1 &
+
+      - name: Start frontend (dev:test)
+        run: |
+          FRONTEND_PORT=4173 \
+          VITE_API_URL=http://localhost:3002 \
+          nohup npm run dev:test --prefix front > /tmp/front-e2e.log 2>&1 &
+
+      - name: Wait for services
+        run: |
+          for i in {1..40}; do
+            back_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:3002/health" || true)
+            front_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:4173" || true)
+
+            if [ "$back_code" = "200" ] && [ "$front_code" = "200" ]; then
+              echo "Front y back listos para E2E"
+              exit 0
+            fi
+
+            echo "Esperando servicios... intento=$i back=$back_code front=$front_code"
+            sleep 3
+          done
+
+          echo "Servicios no disponibles para E2E"
+          echo "--- BACK LOG ---"
+          cat /tmp/back-e2e.log || true
+          echo "--- FRONT LOG ---"
+          cat /tmp/front-e2e.log || true
+          exit 1
+
+      - name: Run Cypress E2E
+        run: |
+          CYPRESS_BASE_URL=http://localhost:4173 \
+          CYPRESS_API_URL=http://localhost:3002 \
+          npm run e2e --prefix front
+
+      - name: Upload Cypress artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-failure-artifacts
+          path: |
+            front/cypress/screenshots
+            front/cypress/videos
+          if-no-files-found: ignore
+
+      - name: Print services logs on failure
+        if: failure()
+        run: |
+          echo "--- BACK LOG ---"
+          cat /tmp/back-e2e.log || true
+          echo "--- FRONT LOG ---"
+          cat /tmp/front-e2e.log || true
+
+      - name: E2E summary
+        if: success()
+        run: |
+          {
+            echo "### E2E Cypress"
+            echo ""
+            echo "Estado: OK"
+            echo "Casos cubiertos:"
+            echo "- Crear tarea"
+            echo "- Actualizar tarea"
+            echo "- Manejo de error front-back"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  sonarcloud-ci:
+    name: Analisis estatico (SonarCloud + Quality Gate)
     runs-on: ubuntu-latest
     needs: [front-ci, back-ci]
     steps:
-      - name: CI succeeded
-        run: echo "Front and back jobs passed successfully"
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verificar secrets SonarCloud
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ] || [ -z "$SONAR_ORGANIZATION" ] || [ -z "$SONAR_PROJECT_KEY" ]; then
+            echo "Faltan secrets de SonarCloud: SONAR_TOKEN, SONAR_ORGANIZATION, SONAR_PROJECT_KEY" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: |
+          npm install --prefix front
+          npm install --prefix back
+
+      - name: Generate coverage for SonarCloud
+        run: |
+          npm run test --prefix front -- --run \
+            --coverage \
+            --coverage.reporter=lcov \
+            --coverage.reportsDirectory=./coverage
+
+          npm run test:unit --prefix back -- \
+            --coverage \
+            --coverage.reporter=lcov \
+            --coverage.reportsDirectory=./coverage/unit
+
+      - name: SonarCloud scan + quality gate
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300
+
+      - name: Sonar summary
+        if: success()
+        run: |
+          {
+            echo "### SonarCloud"
+            echo ""
+            echo "Estado del Quality Gate: OK"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  ci-summary:
+    name: Resumen final CI
+    runs-on: ubuntu-latest
+    needs: [front-ci, back-ci, e2e-ci, sonarcloud-ci]
+    steps:
+      - name: CI completed
+        run: |
+          echo "CI completo: coverage gates + SonarCloud + Cypress E2E en verde"
