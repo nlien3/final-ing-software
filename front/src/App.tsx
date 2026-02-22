@@ -194,7 +194,7 @@ export default function App() {
 
   return (
     <main className="container">
-      <h1>Task Manager</h1>
+      <h1>Task Manager v 1.0</h1>
       <p className="subtitle">CRUD basico con titulo, descripcion, edicion y fecha de creacion.</p>
 
       <form onSubmit={onSubmit} className="create-form">
