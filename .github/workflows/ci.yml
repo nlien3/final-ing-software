@@ -45,22 +45,6 @@ jobs:
           --coverage.reporter=json-summary
           --coverage.reportsDirectory=./coverage
 
-      - name: Upload front test report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: front-test-report
-          path: front/test-results/front-junit.xml
-          if-no-files-found: warn
-
-      - name: Upload front coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: front-coverage-report
-          path: front/coverage
-          if-no-files-found: warn
-
       - name: Front test summary
         if: always()
         run: |
@@ -87,8 +71,6 @@ jobs:
             echo "| tests | failures | errors | skipped |"
             echo "| ---: | ---: | ---: | ---: |"
             echo "| $TESTS | $FAILURES | $ERRORS | $SKIPPED |"
-            echo ""
-            echo "Reporte: \`front/test-results/front-junit.xml\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Front coverage summary
@@ -101,9 +83,8 @@ jobs:
             exit 0
           fi
 
-          read -r LINES FUNCTIONS BRANCHES STATEMENTS <<EOF
-          $(node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).total;const fmt=(n)=>Number(n||0).toFixed(2);process.stdout.write([fmt(t.lines.pct),fmt(t.functions.pct),fmt(t.branches.pct),fmt(t.statements.pct)].join(' '));" "$COVERAGE_FILE")
-          EOF
+          METRICS=$(node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).total;const fmt=(n)=>Number(n||0).toFixed(2);process.stdout.write([fmt(t.lines.pct),fmt(t.functions.pct),fmt(t.branches.pct),fmt(t.statements.pct)].join(' '));" "$COVERAGE_FILE")
+          IFS=' ' read -r LINES FUNCTIONS BRANCHES STATEMENTS <<< "$METRICS"
 
           {
             echo "### Front Coverage"
@@ -111,8 +92,6 @@ jobs:
             echo "| lines | functions | branches | statements |"
             echo "| ---: | ---: | ---: | ---: |"
             echo "| ${LINES}% | ${FUNCTIONS}% | ${BRANCHES}% | ${STATEMENTS}% |"
-            echo ""
-            echo "Reporte HTML: artifact \`front-coverage-report\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
@@ -188,26 +167,6 @@ jobs:
           --coverage.reporter=json-summary
           --coverage.reportsDirectory=./coverage/integration
 
-      - name: Upload back test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: back-test-reports
-          path: |
-            back/test-results/back-unit-junit.xml
-            back/test-results/back-integration-junit.xml
-          if-no-files-found: warn
-
-      - name: Upload back coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: back-coverage-report
-          path: |
-            back/coverage/unit
-            back/coverage/integration
-          if-no-files-found: warn
-
       - name: Back test summary
         if: always()
         run: |
@@ -244,13 +203,6 @@ jobs:
           summarize_report "unit" "test-results/back-unit-junit.xml"
           summarize_report "integration" "test-results/back-integration-junit.xml"
 
-          {
-            echo ""
-            echo "Reportes:"
-            echo "- \`back/test-results/back-unit-junit.xml\`"
-            echo "- \`back/test-results/back-integration-junit.xml\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Back coverage summary
         if: always()
         run: |
@@ -263,9 +215,8 @@ jobs:
               return
             fi
 
-            read -r lines functions branches statements <<EOF
-            $(node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).total;const fmt=(n)=>Number(n||0).toFixed(2);process.stdout.write([fmt(t.lines.pct),fmt(t.functions.pct),fmt(t.branches.pct),fmt(t.statements.pct)].join(' '));" "$coverage_file")
-            EOF
+            metrics=$(node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).total;const fmt=(n)=>Number(n||0).toFixed(2);process.stdout.write([fmt(t.lines.pct),fmt(t.functions.pct),fmt(t.branches.pct),fmt(t.statements.pct)].join(' '));" "$coverage_file")
+            IFS=' ' read -r lines functions branches statements <<< "$metrics"
 
             echo "| $label | ${lines}% | ${functions}% | ${branches}% | ${statements}% |" >> "$GITHUB_STEP_SUMMARY"
           }
@@ -279,11 +230,6 @@ jobs:
 
           summarize_coverage "unit" "coverage/unit/coverage-summary.json"
           summarize_coverage "integration" "coverage/integration/coverage-summary.json"
-
-          {
-            echo ""
-            echo "Reporte HTML: artifact \`back-coverage-report\`"
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
         run: npm run build

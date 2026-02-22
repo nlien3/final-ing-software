@@ -243,12 +243,6 @@ En `.github/workflows/ci.yml` se ejecuta automaticamente:
 
 - Frontend tests + build
 - Backend `test:unit` + `test:integration` + build
-- Reportes de tests en formato JUnit/XML:
-  - `front-test-report` (`front/test-results/front-junit.xml`)
-  - `back-test-reports` (`back/test-results/back-unit-junit.xml`, `back/test-results/back-integration-junit.xml`)
-- Reportes de cobertura (HTML + `coverage-summary.json`):
-  - `front-coverage-report` (`front/coverage/`)
-  - `back-coverage-report` (`back/coverage/unit`, `back/coverage/integration`)
 - Resumen de resultados por job en `GITHUB_STEP_SUMMARY`.
   - Tests: cantidad, failures, errors, skipped.
   - Coverage: porcentaje de lines/functions/branches/statements.

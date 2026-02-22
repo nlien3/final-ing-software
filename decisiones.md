@@ -169,13 +169,10 @@ En CI (`ci.yml`) backend ejecuta:
 
 Y frontend ejecuta tests + build, asegurando validacion automatica en cada push/PR.
 
-Ademas, el pipeline genera reportes JUnit (`.xml`) por suite y los publica como artefactos para auditoria:
-
-- `front-test-report`
-- `back-test-reports` (unit + integration)
+Ademas, el pipeline genera reportes JUnit (`.xml`) y cobertura (`coverage-summary.json`) por suite para calcular resumenes en el mismo run.
 
 Tambien se agrego cobertura automatica en CI usando Vitest coverage (`v8`):
 
-- Front: `front-coverage-report` con HTML y `coverage-summary.json`.
-- Back: `back-coverage-report` con HTML + resumen para unit e integration por separado.
-- El run publica porcentajes (lines/functions/branches/statements) en `GITHUB_STEP_SUMMARY`.
+- Front: cobertura global del job de frontend.
+- Back: cobertura separada para unit e integration.
+- El run publica porcentajes (lines/functions/branches/statements) y estado de tests en `GITHUB_STEP_SUMMARY`.
