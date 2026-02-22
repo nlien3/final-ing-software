@@ -73,7 +73,7 @@ jobs:
             echo "| $TESTS | $FAILURES | $ERRORS | $SKIPPED |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          TEST_CASES=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const attr=(s,k)=>{const m=s.match(new RegExp(k+"=\\"([^\\"]*)\\""));return m?m[1]:"";};const names=[];for(const m of xml.matchAll(/<testcase\b([^>]*)>/g)){const a=m[1];const name=attr(a,"name");const cls=attr(a,"classname");if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$REPORT_FILE")
+          TEST_CASES=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const names=[];for(const m of xml.matchAll(/<testcase\b([^>]*)>/g)){const attrs=m[1];const name=(attrs.match(/\bname="([^"]*)"/)||[])[1]||"";const cls=(attrs.match(/\bclassname="([^"]*)"/)||[])[1]||"";if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$REPORT_FILE" || true)
           if [ -n "$TEST_CASES" ]; then
             {
               echo ""
@@ -214,7 +214,7 @@ jobs:
             fi
 
             local test_cases
-            test_cases=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const attr=(s,k)=>{const m=s.match(new RegExp(k+"=\\"([^\\"]*)\\""));return m?m[1]:"";};const names=[];for(const m of xml.matchAll(/<testcase\b([^>]*)>/g)){const a=m[1];const name=attr(a,"name");const cls=attr(a,"classname");if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$report_file")
+            test_cases=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const names=[];for(const m of xml.matchAll(/<testcase\b([^>]*)>/g)){const attrs=m[1];const name=(attrs.match(/\bname="([^"]*)"/)||[])[1]||"";const cls=(attrs.match(/\bclassname="([^"]*)"/)||[])[1]||"";if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$report_file" || true)
             if [ -z "$test_cases" ]; then
               return
             fi
