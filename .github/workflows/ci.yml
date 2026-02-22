@@ -45,12 +45,12 @@ jobs:
           --coverage.reporter=json-summary
           --coverage.reportsDirectory=./coverage
 
-      - name: Front test summary
+      - name: Resumen de pruebas Frontend
         if: always()
         run: |
           REPORT_FILE="test-results/front-junit.xml"
           if [ ! -f "$REPORT_FILE" ]; then
-            echo "### Front Tests" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Pruebas Frontend" >> "$GITHUB_STEP_SUMMARY"
             echo "No se encontro reporte JUnit." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -66,18 +66,19 @@ jobs:
           SKIPPED=$(get_attr skipped)
 
           {
-            echo "### Front Tests"
+            echo "### Pruebas Frontend"
             echo ""
-            echo "| tests | failures | errors | skipped |"
+            echo "| pruebas | fallas | errores | omitidas |"
             echo "| ---: | ---: | ---: | ---: |"
             echo "| $TESTS | $FAILURES | $ERRORS | $SKIPPED |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          TEST_CASES=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const names=[];for(const m of xml.matchAll(/<testcase\b([^>]*)>/g)){const attrs=m[1];const name=(attrs.match(/\bname="([^"]*)"/)||[])[1]||"";const cls=(attrs.match(/\bclassname="([^"]*)"/)||[])[1]||"";if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$REPORT_FILE" || true)
+          TEST_CASES=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const names=[];const re=/<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/g;for(const m of xml.matchAll(re)){const attrs=m[1]||m[3]||"";const name=(attrs.match(/\bname="([^"]*)"/)||[])[1]||"";const cls=(attrs.match(/\bclassname="([^"]*)"/)||[])[1]||"";if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$REPORT_FILE" || true)
+          FAILED_TEST_CASES=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const failed=[];const re=/<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/g;for(const m of xml.matchAll(re)){const attrs=m[1]||m[3]||"";const body=m[2]||"";const name=(attrs.match(/\bname="([^"]*)"/)||[])[1]||"";const cls=(attrs.match(/\bclassname="([^"]*)"/)||[])[1]||"";if(!name)continue;if(/<(failure|error)\b/.test(body))failed.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(failed.join("\n"));' "$REPORT_FILE" || true)
           if [ -n "$TEST_CASES" ]; then
             {
               echo ""
-              echo "Detalle de tests ejecutados:"
+              echo "Detalle de pruebas ejecutadas:"
             } >> "$GITHUB_STEP_SUMMARY"
 
             while IFS= read -r test_case; do
@@ -85,12 +86,25 @@ jobs:
             done <<< "$TEST_CASES"
           fi
 
-      - name: Front coverage summary
+          {
+            echo ""
+            echo "Pruebas fallidas:"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$FAILED_TEST_CASES" ]; then
+            while IFS= read -r failed_test_case; do
+              [ -n "$failed_test_case" ] && echo "- $failed_test_case" >> "$GITHUB_STEP_SUMMARY"
+            done <<< "$FAILED_TEST_CASES"
+          else
+            echo "- Ninguna" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Resumen de cobertura Frontend
         if: always()
         run: |
           COVERAGE_FILE="coverage/coverage-summary.json"
           if [ ! -f "$COVERAGE_FILE" ]; then
-            echo "### Front Coverage" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Cobertura Frontend" >> "$GITHUB_STEP_SUMMARY"
             echo "No se encontro coverage-summary.json." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -99,9 +113,9 @@ jobs:
           IFS=' ' read -r LINES FUNCTIONS BRANCHES STATEMENTS <<< "$METRICS"
 
           {
-            echo "### Front Coverage"
+            echo "### Cobertura Frontend"
             echo ""
-            echo "| lines | functions | branches | statements |"
+            echo "| lineas | funciones | ramas | sentencias |"
             echo "| ---: | ---: | ---: | ---: |"
             echo "| ${LINES}% | ${FUNCTIONS}% | ${BRANCHES}% | ${STATEMENTS}% |"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -179,7 +193,7 @@ jobs:
           --coverage.reporter=json-summary
           --coverage.reportsDirectory=./coverage/integration
 
-      - name: Back test summary
+      - name: Resumen de pruebas Backend
         if: always()
         run: |
           summarize_report() {
@@ -214,7 +228,7 @@ jobs:
             fi
 
             local test_cases
-            test_cases=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const names=[];for(const m of xml.matchAll(/<testcase\b([^>]*)>/g)){const attrs=m[1];const name=(attrs.match(/\bname="([^"]*)"/)||[])[1]||"";const cls=(attrs.match(/\bclassname="([^"]*)"/)||[])[1]||"";if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$report_file" || true)
+            test_cases=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const names=[];const re=/<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/g;for(const m of xml.matchAll(re)){const attrs=m[1]||m[3]||"";const name=(attrs.match(/\bname="([^"]*)"/)||[])[1]||"";const cls=(attrs.match(/\bclassname="([^"]*)"/)||[])[1]||"";if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$report_file" || true)
             if [ -z "$test_cases" ]; then
               return
             fi
@@ -229,10 +243,35 @@ jobs:
             done <<< "$test_cases"
           }
 
+          append_failed_case_list() {
+            local label="$1"
+            local report_file="$2"
+
+            if [ ! -f "$report_file" ]; then
+              return
+            fi
+
+            local failed_cases
+            failed_cases=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const failed=[];const re=/<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/g;for(const m of xml.matchAll(re)){const attrs=m[1]||m[3]||"";const body=m[2]||"";const name=(attrs.match(/\bname="([^"]*)"/)||[])[1]||"";const cls=(attrs.match(/\bclassname="([^"]*)"/)||[])[1]||"";if(!name)continue;if(/<(failure|error)\b/.test(body))failed.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(failed.join("\n"));' "$report_file" || true)
+
+            {
+              echo ""
+              echo "Pruebas fallidas $label:"
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            if [ -n "$failed_cases" ]; then
+              while IFS= read -r failed_case; do
+                [ -n "$failed_case" ] && echo "- $failed_case" >> "$GITHUB_STEP_SUMMARY"
+              done <<< "$failed_cases"
+            else
+              echo "- Ninguna" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          }
+
           {
-            echo "### Back Tests"
+            echo "### Pruebas Backend"
             echo ""
-            echo "| suite | tests | failures | errors | skipped |"
+            echo "| suite | pruebas | fallas | errores | omitidas |"
             echo "| --- | ---: | ---: | ---: | ---: |"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -240,8 +279,10 @@ jobs:
           summarize_report "integration" "test-results/back-integration-junit.xml"
           append_case_list "unit" "test-results/back-unit-junit.xml"
           append_case_list "integration" "test-results/back-integration-junit.xml"
+          append_failed_case_list "unit" "test-results/back-unit-junit.xml"
+          append_failed_case_list "integration" "test-results/back-integration-junit.xml"
 
-      - name: Back coverage summary
+      - name: Resumen de cobertura Backend
         if: always()
         run: |
           summarize_coverage() {
@@ -260,9 +301,9 @@ jobs:
           }
 
           {
-            echo "### Back Coverage"
+            echo "### Cobertura Backend"
             echo ""
-            echo "| suite | lines | functions | branches | statements |"
+            echo "| suite | lineas | funciones | ramas | sentencias |"
             echo "| --- | ---: | ---: | ---: | ---: |"
           } >> "$GITHUB_STEP_SUMMARY"
 
