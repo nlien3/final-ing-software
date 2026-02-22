@@ -13,7 +13,9 @@
     "preview": "vite preview",
     "preview:test": "vite preview --mode test --outDir dist-test",
     "preview:prod": "vite preview --mode prod --outDir dist-prod",
-    "test": "vitest"
+    "test": "vitest",
+    "test:unit": "vitest run src/api.test.ts",
+    "test:ui": "vitest run src/App.test.tsx"
   },
   "dependencies": {
     "react": "^18.3.1",
