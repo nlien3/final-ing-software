@@ -484,7 +484,7 @@ jobs:
             --coverage.reportsDirectory=./coverage/unit
 
       - name: SonarCloud scan + quality gate
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
