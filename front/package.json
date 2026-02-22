@@ -1,0 +1,33 @@
+{
+  "name": "tp04-front",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:test": "vite --mode test",
+    "dev:prod": "vite --mode prod",
+    "build": "tsc -b && vite build",
+    "build:test": "tsc -b && vite build --mode test --outDir dist-test",
+    "build:prod": "tsc -b && vite build --mode prod --outDir dist-prod",
+    "preview": "vite preview",
+    "preview:test": "vite preview --mode test --outDir dist-test",
+    "preview:prod": "vite preview --mode prod --outDir dist-prod",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "jsdom": "^28.1.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vitest": "^4.0.18"
+  }
+}

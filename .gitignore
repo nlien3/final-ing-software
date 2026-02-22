@@ -1,0 +1,14 @@
+node_modules
+.env
+.env.*
+!.env.example
+dist
+coverage
+.DS_Store
+*.log
+
+extra/
+front/.env.test
+front/.env.prod
+back/.env.test
+back/.env.prod
