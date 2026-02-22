@@ -145,7 +145,7 @@ Esto permite probar la logica de negocio sin depender de PostgreSQL real.
 ### Mocking implementado
 
 - Backend unit:
-  - `tasks.service.unit.test.ts`: mock de `TasksRepository`.
+  - `tasks.service.unit.test.ts`: mock de `TasksRepository` usando `vi.fn` y patron AAA (Arrange/Act/Assert).
 - Backend integracion:
   - `app.test.ts`: pruebas HTTP con `Supertest` contra app real (usando PostgreSQL de test).
 - Frontend unit:
@@ -155,6 +155,7 @@ Esto permite probar la logica de negocio sin depender de PostgreSQL real.
 ### Casos relevantes cubiertos
 
 - Validaciones de negocio (titulo/descripcion obligatorios y longitudes).
+- Validaciones de tipos y entradas invalidas (`id` no entero, `done` no boolean, payload vacio en update).
 - Manejo de errores esperados (`400`, `404`) y errores inesperados (`500`).
 - Flujos de UI (crear, editar, eliminar, filtrar).
 - Edge cases de API (`204 No Content`, errores con mensaje de backend).
@@ -167,3 +168,8 @@ En CI (`ci.yml`) backend ejecuta:
 - `npm run test:integration`
 
 Y frontend ejecuta tests + build, asegurando validacion automatica en cada push/PR.
+
+Ademas, el pipeline genera reportes JUnit (`.xml`) por suite y los publica como artefactos para auditoria:
+
+- `front-test-report`
+- `back-test-reports` (unit + integration)

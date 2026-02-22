@@ -1,4 +1,4 @@
-# TP04 + TP05 - CI/CD Full Stack con GitHub Actions y Render
+# TP04 + TP05 + TP06 - CI/CD + Testing Full Stack con GitHub Actions y Render
 
 Aplicacion monorepo:
 
@@ -198,6 +198,12 @@ Frameworks elegidos:
   - backend: mocks de `TasksRepository` en unit tests
   - frontend: mock de `fetch` para API y componentes
 
+### Prerequisitos para correr tests
+
+- Backend unit (`test:unit`): no requiere base de datos.
+- Backend integracion (`test:integration`): requiere PostgreSQL disponible y `back/.env.test` con `DATABASE_URL` valida.
+- Frontend tests: no requieren backend levantado porque la API esta mockeada.
+
 ### Comandos de tests backend
 
 Unitarios (sin DB):
@@ -224,11 +230,22 @@ cd back && npm install && npm run test:env
 cd front && npm install && npm run test -- --run
 ```
 
+### Validacion completa TP06 (local)
+
+```bash
+cd back && npm install && npm run test:unit && npm run test:integration && npm run build
+cd ../front && npm install && npm run test -- --run && npm run build
+```
+
 ### Ejecucion en CI
 
 En `.github/workflows/ci.yml` se ejecuta automaticamente:
 
 - Frontend tests + build
 - Backend `test:unit` + `test:integration` + build
+- Reportes de tests en formato JUnit/XML:
+  - `front-test-report` (`front/test-results/front-junit.xml`)
+  - `back-test-reports` (`back/test-results/back-unit-junit.xml`, `back/test-results/back-integration-junit.xml`)
+- Resumen de resultados por job en `GITHUB_STEP_SUMMARY`.
 
 Con esto las pruebas quedan integradas en el pipeline de CI/CD.
