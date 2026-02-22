@@ -73,6 +73,18 @@ jobs:
             echo "| $TESTS | $FAILURES | $ERRORS | $SKIPPED |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+          TEST_CASES=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const attr=(s,k)=>{const m=s.match(new RegExp(k+"=\\"([^\\"]*)\\""));return m?m[1]:"";};const names=[];for(const m of xml.matchAll(/<testcase\b([^>]*)>/g)){const a=m[1];const name=attr(a,"name");const cls=attr(a,"classname");if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$REPORT_FILE")
+          if [ -n "$TEST_CASES" ]; then
+            {
+              echo ""
+              echo "Detalle de tests ejecutados:"
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            while IFS= read -r test_case; do
+              [ -n "$test_case" ] && echo "- $test_case" >> "$GITHUB_STEP_SUMMARY"
+            done <<< "$TEST_CASES"
+          fi
+
       - name: Front coverage summary
         if: always()
         run: |
@@ -193,6 +205,30 @@ jobs:
             echo "| $label | $tests | $failures | $errors | $skipped |" >> "$GITHUB_STEP_SUMMARY"
           }
 
+          append_case_list() {
+            local label="$1"
+            local report_file="$2"
+
+            if [ ! -f "$report_file" ]; then
+              return
+            fi
+
+            local test_cases
+            test_cases=$(node -e 'const fs=require("fs");const xml=fs.readFileSync(process.argv[1],"utf8");const attr=(s,k)=>{const m=s.match(new RegExp(k+"=\\"([^\\"]*)\\""));return m?m[1]:"";};const names=[];for(const m of xml.matchAll(/<testcase\b([^>]*)>/g)){const a=m[1];const name=attr(a,"name");const cls=attr(a,"classname");if(name)names.push(cls?`${cls} :: ${name}`:name);}process.stdout.write(names.join("\n"));' "$report_file")
+            if [ -z "$test_cases" ]; then
+              return
+            fi
+
+            {
+              echo ""
+              echo "Detalle $label:"
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            while IFS= read -r test_case; do
+              [ -n "$test_case" ] && echo "- $test_case" >> "$GITHUB_STEP_SUMMARY"
+            done <<< "$test_cases"
+          }
+
           {
             echo "### Back Tests"
             echo ""
@@ -202,6 +238,8 @@ jobs:
 
           summarize_report "unit" "test-results/back-unit-junit.xml"
           summarize_report "integration" "test-results/back-integration-junit.xml"
+          append_case_list "unit" "test-results/back-unit-junit.xml"
+          append_case_list "integration" "test-results/back-integration-junit.xml"
 
       - name: Back coverage summary
         if: always()
