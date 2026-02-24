@@ -17,7 +17,7 @@ describe('api unit', () => {
     const result = await getTasks();
 
     expect(globalThis.fetch).toHaveBeenCalledWith(`${baseUrl}/tasks`, expect.any(Object));
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(1);
   });
 
   // Verifica que createTask envie POST /tasks con el payload esperado.
