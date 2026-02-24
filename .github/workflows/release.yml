@@ -167,7 +167,7 @@ jobs:
             exit 0
           fi
 
-          read TESTS FAILURES ERRORS SKIPPED < <(node -e '
+          STATS=$(node -e '
             const fs = require("fs");
             const files = process.argv.slice(1);
             const attr = (s, k) => {
@@ -186,7 +186,12 @@ jobs:
               }
             }
             process.stdout.write(`${tests} ${failures} ${errors} ${skipped}`);
-          ' "${REPORT_FILES[@]}")
+          ' "${REPORT_FILES[@]}" || echo "0 0 0 0")
+          set -- $STATS
+          TESTS=${1:-0}
+          FAILURES=${2:-0}
+          ERRORS=${3:-0}
+          SKIPPED=${4:-0}
 
           TEST_CASES=$(node -e '
             const fs = require("fs");
