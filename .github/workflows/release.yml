@@ -134,11 +134,126 @@ jobs:
       - name: Install frontend dependencies (post-deploy QA tests)
         run: npm install --prefix front
 
-      - name: Run Cypress E2E against QA
+      - name: Run Cypress E2E against QA (with JUnit report)
         run: |
+          mkdir -p front/test-results/cypress
+          cd front
           CYPRESS_BASE_URL="${{ secrets.FRONT_QA_URL }}" \
           CYPRESS_API_URL="${{ secrets.BACK_QA_URL }}" \
-          npm run e2e --prefix front
+          npm run e2e -- \
+            --reporter junit \
+            --reporter-options "mochaFile=test-results/cypress/e2e-qa-[hash].xml,toConsole=true"
+
+      - name: Upload Cypress JUnit report for QA (formal)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-e2e-junit-qa
+          path: front/test-results/cypress/*.xml
+          if-no-files-found: warn
+
+      - name: Resumen E2E QA (visible sin descargar)
+        if: always()
+        run: |
+          shopt -s nullglob
+          REPORT_FILES=(front/test-results/cypress/*.xml)
+
+          if [ ${#REPORT_FILES[@]} -eq 0 ]; then
+            {
+              echo "### E2E Cypress QA"
+              echo ""
+              echo "No se encontro reporte JUnit de Cypress."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          read TESTS FAILURES ERRORS SKIPPED < <(node -e '
+            const fs = require("fs");
+            const files = process.argv.slice(1);
+            const attr = (s, k) => {
+              const m = s.match(new RegExp(`\\b${k}="([0-9]+)"`));
+              return m ? Number(m[1]) : 0;
+            };
+            let tests = 0, failures = 0, errors = 0, skipped = 0;
+            for (const f of files) {
+              const xml = fs.readFileSync(f, "utf8");
+              for (const m of xml.matchAll(/<testsuite\b([^>]*)>/g)) {
+                const a = m[1] || "";
+                tests += attr(a, "tests");
+                failures += attr(a, "failures");
+                errors += attr(a, "errors");
+                skipped += attr(a, "skipped");
+              }
+            }
+            process.stdout.write(`${tests} ${failures} ${errors} ${skipped}`);
+          ' "${REPORT_FILES[@]}")
+
+          TEST_CASES=$(node -e '
+            const fs = require("fs");
+            const files = process.argv.slice(1);
+            const names = [];
+            for (const f of files) {
+              const xml = fs.readFileSync(f, "utf8");
+              const re = /<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/g;
+              for (const m of xml.matchAll(re)) {
+                const attrs = m[1] || m[3] || "";
+                const name = (attrs.match(/\bname="([^"]*)"/) || [])[1] || "";
+                const cls = (attrs.match(/\bclassname="([^"]*)"/) || [])[1] || "";
+                if (name) names.push(cls ? `${cls} :: ${name}` : name);
+              }
+            }
+            process.stdout.write(names.join("\n"));
+          ' "${REPORT_FILES[@]}" || true)
+
+          FAILED_TEST_CASES=$(node -e '
+            const fs = require("fs");
+            const files = process.argv.slice(1);
+            const failed = [];
+            for (const f of files) {
+              const xml = fs.readFileSync(f, "utf8");
+              const re = /<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/g;
+              for (const m of xml.matchAll(re)) {
+                const attrs = m[1] || m[3] || "";
+                const body = m[2] || "";
+                const name = (attrs.match(/\bname="([^"]*)"/) || [])[1] || "";
+                const cls = (attrs.match(/\bclassname="([^"]*)"/) || [])[1] || "";
+                if (!name) continue;
+                if (/<(failure|error)\b/.test(body)) failed.push(cls ? `${cls} :: ${name}` : name);
+              }
+            }
+            process.stdout.write(failed.join("\n"));
+          ' "${REPORT_FILES[@]}" || true)
+
+          {
+            echo "### E2E Cypress QA"
+            echo ""
+            echo "| pruebas | fallas | errores | omitidas |"
+            echo "| ---: | ---: | ---: | ---: |"
+            echo "| $TESTS | $FAILURES | $ERRORS | $SKIPPED |"
+            echo ""
+            echo "Detalle de pruebas ejecutadas:"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$TEST_CASES" ]; then
+            while IFS= read -r test_case; do
+              [ -n "$test_case" ] && echo "- $test_case" >> "$GITHUB_STEP_SUMMARY"
+            done <<< "$TEST_CASES"
+          else
+            echo "- No disponible" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          {
+            echo ""
+            echo "Pruebas fallidas:"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$FAILED_TEST_CASES" ]; then
+            while IFS= read -r failed_case; do
+              [ -n "$failed_case" ] && echo "- $failed_case" >> "$GITHUB_STEP_SUMMARY"
+            done <<< "$FAILED_TEST_CASES"
+          else
+            echo "- Ninguna" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload Cypress artifacts on QA failure
         if: failure()

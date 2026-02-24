@@ -120,6 +120,8 @@ Workflow: `.github/workflows/ci.yml`
 - Publica artefactos:
   - `front-dist`
   - `back-dist`
+  - `cypress-e2e-junit-ci` (reporte formal XML JUnit de E2E)
+  - Ademas, el reporte E2E queda visible directamente en `Job summary` (sin descargar artifacts).
 
 ## CD (TP05)
 
@@ -137,6 +139,8 @@ Workflow: `.github/workflows/release.yml`
   - PROD: `${BACK_PROD_URL}/health`
 - Post-deploy QA:
   - Ejecuta Cypress E2E contra QA usando `FRONT_QA_URL` + `BACK_QA_URL`.
+  - Publica artifact `cypress-e2e-junit-qa` (reporte formal XML JUnit).
+  - Muestra resumen E2E en `Job summary` (sin descarga).
 
 ### 2) Workflow de rollback
 

@@ -220,6 +220,10 @@ Estas pruebas se ejecutan en:
 
 - job `e2e-ci` (pre-deploy), levantando back + front local en CI con PostgreSQL service container.
 - `release.yml` durante `Deploy QA` (post-deploy), apuntando al entorno QA real (`FRONT_QA_URL` + `BACK_QA_URL`).
+- En ambos casos se genera reporte formal JUnit (XML) como artifact:
+  - `cypress-e2e-junit-ci`
+  - `cypress-e2e-junit-qa`
+- Ademas, ambos pipelines escriben el resumen E2E completo en `GITHUB_STEP_SUMMARY` para revisarlo sin descarga.
 
 ### Criterio de bloqueo final de pipeline
 
