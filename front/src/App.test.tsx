@@ -12,6 +12,7 @@ const tasksResponse = [
 ];
 
 describe('App', () => {
+  // Prepara un mock de fetch por URL/metodo para simular respuestas del backend en cada test.
   beforeEach(() => {
     globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -89,6 +90,7 @@ describe('App', () => {
     }) as unknown as typeof fetch;
   });
 
+  // Verifica carga inicial: muestra estado de carga y luego renderiza tareas traidas por GET /tasks.
   it('renders and loads tasks', async () => {
     render(<App />);
     expect(screen.getByText('Cargando...')).toBeInTheDocument();
@@ -100,6 +102,7 @@ describe('App', () => {
     });
   });
 
+  // Verifica alta de tarea desde el formulario y actualizacion del listado en pantalla.
   it('creates a task', async () => {
     render(<App />);
 
@@ -119,6 +122,7 @@ describe('App', () => {
     });
   });
 
+  // Verifica edicion por modal: abre, cambia campos y guarda cambios.
   it('edits a task through modal', async () => {
     render(<App />);
 
@@ -141,6 +145,7 @@ describe('App', () => {
     });
   });
 
+  // Verifica borrado con confirmacion: abre modal de eliminar y remueve la tarea al confirmar.
   it('deletes a task through confirmation modal', async () => {
     render(<App />);
 
@@ -158,6 +163,7 @@ describe('App', () => {
     });
   });
 
+  // Verifica filtro de estado: pendientes/completadas muestran solo las tareas correspondientes.
   it('filters tasks by status', async () => {
     render(<App />);
 
@@ -175,6 +181,7 @@ describe('App', () => {
     expect(screen.getByText('Tarea completada')).toBeInTheDocument();
   });
 
+  // Verifica validacion local del formulario cuando titulo y descripcion llegan vacios.
   it('shows validation error when creating task with blank fields', async () => {
     render(<App />);
 
@@ -189,6 +196,7 @@ describe('App', () => {
     expect(screen.getByText('El titulo y la descripcion son obligatorios')).toBeInTheDocument();
   });
 
+  // Verifica cambio de estado done desde el checkbox en el listado.
   it('toggles task completion from checkbox', async () => {
     render(<App />);
 
@@ -204,6 +212,7 @@ describe('App', () => {
     });
   });
 
+  // Verifica proteccion ante salida de modal de edicion con cambios sin guardar.
   it('opens discard changes confirmation and exits edit without saving', async () => {
     render(<App />);
 
@@ -227,6 +236,7 @@ describe('App', () => {
     });
   });
 
+  // Verifica UX: el modal de eliminar se cierra al presionar Escape.
   it('closes delete modal when pressing Escape', async () => {
     render(<App />);
 
