@@ -523,6 +523,11 @@ jobs:
             echo "| ---: | ---: | ---: | ---: |"
             echo "| $TESTS | $FAILURES | $ERRORS | $SKIPPED |"
             echo ""
+            echo "Casos cubiertos:"
+            echo "- Crear tarea"
+            echo "- Actualizar tarea"
+            echo "- Manejo de error front-back"
+            echo ""
             echo "Detalle de pruebas ejecutadas:"
           } >> "$GITHUB_STEP_SUMMARY"
 
