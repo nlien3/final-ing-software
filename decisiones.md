@@ -54,7 +54,7 @@ Workflow release: `.github/workflows/release.yml`
 
 - Trigger automatico por `workflow_run` exitoso de `CI` sobre `main`
 - Trigger manual por `workflow_dispatch` (permite seleccionar `source_run_id`)
-- `Deploy QA` -> deploy back/front QA en Render + health check
+- `Deploy QA` -> deploy back/front QA en Render + health check + Cypress E2E post-deploy contra QA
 - `Deploy Production` -> deploy back/front PROD + health check
 
 ### Conexion con pipeline de build
@@ -99,6 +99,7 @@ Secrets requeridos en GitHub Actions:
 - `RENDER_SERVICE_ID_FRONT_QA`
 - `RENDER_SERVICE_ID_BACK_PROD`
 - `RENDER_SERVICE_ID_FRONT_PROD`
+- `FRONT_QA_URL`
 - `BACK_QA_URL`
 - `BACK_PROD_URL`
 
@@ -215,7 +216,10 @@ Casos implementados:
 2. Actualizar tarea existente.
 3. Validar manejo de error front-back con payload rechazado por backend.
 
-Estas pruebas se ejecutan en el job `e2e-ci` levantando back + front y usando PostgreSQL service container.
+Estas pruebas se ejecutan en:
+
+- job `e2e-ci` (pre-deploy), levantando back + front local en CI con PostgreSQL service container.
+- `release.yml` durante `Deploy QA` (post-deploy), apuntando al entorno QA real (`FRONT_QA_URL` + `BACK_QA_URL`).
 
 ### Criterio de bloqueo final de pipeline
 

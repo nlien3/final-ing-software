@@ -135,6 +135,8 @@ Workflow: `.github/workflows/release.yml`
 - Health checks:
   - QA: `${BACK_QA_URL}/health`
   - PROD: `${BACK_PROD_URL}/health`
+- Post-deploy QA:
+  - Ejecuta Cypress E2E contra QA usando `FRONT_QA_URL` + `BACK_QA_URL`.
 
 ### 2) Workflow de rollback
 
@@ -153,6 +155,7 @@ Configurar en `Settings -> Secrets and variables -> Actions`:
 - `RENDER_SERVICE_ID_FRONT_QA`
 - `RENDER_SERVICE_ID_BACK_PROD`
 - `RENDER_SERVICE_ID_FRONT_PROD`
+- `FRONT_QA_URL`
 - `BACK_QA_URL`
 - `BACK_PROD_URL`
 

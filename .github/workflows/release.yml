@@ -114,6 +114,42 @@ jobs:
           echo "QA health check failed"
           exit 1
 
+      - name: Checkout repository (for post-deploy tests)
+        uses: actions/checkout@v4
+
+      - name: Setup Node (post-deploy QA tests)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: front/package-lock.json
+
+      - name: Verify QA URLs for post-deploy tests
+        run: |
+          if [ -z "${{ secrets.FRONT_QA_URL }}" ] || [ -z "${{ secrets.BACK_QA_URL }}" ]; then
+            echo "Faltan secrets para pruebas post-deploy QA: FRONT_QA_URL y/o BACK_QA_URL" >&2
+            exit 1
+          fi
+
+      - name: Install frontend dependencies (post-deploy QA tests)
+        run: npm install --prefix front
+
+      - name: Run Cypress E2E against QA
+        run: |
+          CYPRESS_BASE_URL="${{ secrets.FRONT_QA_URL }}" \
+          CYPRESS_API_URL="${{ secrets.BACK_QA_URL }}" \
+          npm run e2e --prefix front
+
+      - name: Upload Cypress artifacts on QA failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-qa-failure-artifacts
+          path: |
+            front/cypress/screenshots
+            front/cypress/videos
+          if-no-files-found: ignore
+
   deploy-prod:
     name: Deploy Production
     runs-on: ubuntu-latest
