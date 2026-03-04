@@ -39,6 +39,7 @@ jobs:
       github.event_name == 'workflow_dispatch'
     outputs:
       source_run_id: ${{ steps.pick.outputs.source_run_id }}
+      source_sha: ${{ steps.pick.outputs.source_sha }}
       deploy_qa: ${{ steps.pick.outputs.deploy_qa }}
       deploy_prod: ${{ steps.pick.outputs.deploy_prod }}
     steps:
@@ -47,12 +48,37 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             echo "source_run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+            echo "source_sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
             echo "deploy_qa=true" >> "$GITHUB_OUTPUT"
             echo "deploy_prod=true" >> "$GITHUB_OUTPUT"
           else
             echo "source_run_id=${{ inputs.source_run_id }}" >> "$GITHUB_OUTPUT"
             echo "deploy_qa=${{ inputs.deploy_qa }}" >> "$GITHUB_OUTPUT"
             echo "deploy_prod=${{ inputs.deploy_prod }}" >> "$GITHUB_OUTPUT"
+
+            RUN_API_URL="${{ github.api_url }}/repos/${{ github.repository }}/actions/runs/${{ inputs.source_run_id }}"
+            RUN_JSON=$(curl --fail --show-error --silent \
+              -H "Authorization: Bearer ${{ github.token }}" \
+              -H "Accept: application/vnd.github+json" \
+              "$RUN_API_URL")
+
+            RUN_CONCLUSION=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("conclusion",""))' "$RUN_JSON")
+            RUN_BRANCH=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("head_branch",""))' "$RUN_JSON")
+            SOURCE_SHA=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("head_sha",""))' "$RUN_JSON")
+
+            if [ "$RUN_CONCLUSION" != "success" ]; then
+              echo "El source_run_id=${{ inputs.source_run_id }} no termino en success (conclusion=$RUN_CONCLUSION)" >&2
+              exit 1
+            fi
+            if [ "$RUN_BRANCH" != "main" ]; then
+              echo "El source_run_id=${{ inputs.source_run_id }} no pertenece a main (branch=$RUN_BRANCH)" >&2
+              exit 1
+            fi
+            if [ -z "$SOURCE_SHA" ]; then
+              echo "No se pudo resolver head_sha para source_run_id=${{ inputs.source_run_id }}" >&2
+              exit 1
+            fi
+            echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           fi
 
   deploy-qa:
@@ -83,24 +109,109 @@ jobs:
           test -d artifacts/front-dist
           test -d artifacts/back-dist
           echo "Artifacts from CI run ${{ needs.resolve-run.outputs.source_run_id }} ready"
+          echo "Deploying commit SHA: ${{ needs.resolve-run.outputs.source_sha }}"
 
-      - name: Trigger Render deploy (Back QA)
+      - name: Verify Render secrets for QA
         run: |
-          curl --fail --show-error --silent \
-            -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID_BACK_QA }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{}'
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_BACK_QA }}" ] || [ -z "${{ secrets.RENDER_DEPLOY_HOOK_FRONT_QA }}" ]; then
+            echo "Faltan secrets para deploy deterministico QA: RENDER_DEPLOY_HOOK_BACK_QA y/o RENDER_DEPLOY_HOOK_FRONT_QA" >&2
+            exit 1
+          fi
+          if [ -z "${{ secrets.RENDER_API_KEY }}" ] || [ -z "${{ secrets.RENDER_SERVICE_ID_BACK_QA }}" ] || [ -z "${{ secrets.RENDER_SERVICE_ID_FRONT_QA }}" ]; then
+            echo "Faltan secrets para espera de deploy QA: RENDER_API_KEY, RENDER_SERVICE_ID_BACK_QA y/o RENDER_SERVICE_ID_FRONT_QA" >&2
+            exit 1
+          fi
+          if [ -z "${{ secrets.BACK_QA_URL }}" ]; then
+            echo "Falta BACK_QA_URL para health check QA" >&2
+            exit 1
+          fi
 
-      - name: Trigger Render deploy (Front QA)
+      - name: Trigger Render deploy (Back QA pinned to CI SHA)
+        id: trigger-back-qa
         run: |
-          curl --fail --show-error --silent \
-            -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID_FRONT_QA }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{}'
+          BACK_HOOK="${{ secrets.RENDER_DEPLOY_HOOK_BACK_QA }}"
+          SEP='?'
+          if [[ "$BACK_HOOK" == *\?* ]]; then
+            SEP='&'
+          fi
+          RESPONSE=$(curl --fail --show-error --silent -X POST \
+            "${BACK_HOOK}${SEP}ref=${{ needs.resolve-run.outputs.source_sha }}")
+          DEPLOY_ID=$(printf '%s' "$RESPONSE" | tr -d '\n' | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/^"id"[[:space:]]*:[[:space:]]*"([^"]+)"$/\1/')
+          if [ -z "$DEPLOY_ID" ]; then
+            echo "No se pudo obtener deploy_id para Back QA desde Deploy Hook." >&2
+            echo "Respuesta hook: $RESPONSE" >&2
+            exit 1
+          fi
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+          echo "Back QA deploy_id: $DEPLOY_ID"
 
-      - name: Wait and health check QA
+      - name: Trigger Render deploy (Front QA pinned to CI SHA)
+        id: trigger-front-qa
+        run: |
+          FRONT_HOOK="${{ secrets.RENDER_DEPLOY_HOOK_FRONT_QA }}"
+          SEP='?'
+          if [[ "$FRONT_HOOK" == *\?* ]]; then
+            SEP='&'
+          fi
+          RESPONSE=$(curl --fail --show-error --silent -X POST \
+            "${FRONT_HOOK}${SEP}ref=${{ needs.resolve-run.outputs.source_sha }}")
+          DEPLOY_ID=$(printf '%s' "$RESPONSE" | tr -d '\n' | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/^"id"[[:space:]]*:[[:space:]]*"([^"]+)"$/\1/')
+          if [ -z "$DEPLOY_ID" ]; then
+            echo "No se pudo obtener deploy_id para Front QA desde Deploy Hook." >&2
+            echo "Respuesta hook: $RESPONSE" >&2
+            exit 1
+          fi
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+          echo "Front QA deploy_id: $DEPLOY_ID"
+
+      - name: Wait for Render deploy completion QA (back + front)
+        run: |
+          wait_render_deploy() {
+            local service_id="$1"
+            local deploy_id="$2"
+            local label="$3"
+            local timeout_seconds=600
+            local poll_interval_seconds=10
+            local deadline=$(( $(date +%s) + timeout_seconds ))
+
+            while true; do
+              RESPONSE=$(curl --fail --show-error --silent \
+                -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+                -H "Accept: application/json" \
+                "https://api.render.com/v1/services/${service_id}/deploys/${deploy_id}")
+
+              STATUS=$(printf '%s' "$RESPONSE" | tr -d '\n' | grep -oE '"status"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/^"status"[[:space:]]*:[[:space:]]*"([^"]+)"$/\1/' | tr '[:upper:]' '[:lower:]')
+              if [ -z "$STATUS" ]; then
+                echo "$label: no se pudo leer status del deploy." >&2
+                echo "$label response: $RESPONSE" >&2
+                return 1
+              fi
+
+              echo "$label status=$STATUS (deploy_id=$deploy_id)"
+              case "$STATUS" in
+                live|deployed|update_succeeded|build_succeeded|succeeded|success)
+                  echo "$label deploy completo"
+                  return 0
+                  ;;
+                failed|build_failed|update_failed|error|canceled|cancelled|deactivated)
+                  echo "$label deploy fallo con estado final: $STATUS" >&2
+                  return 1
+                  ;;
+              esac
+
+              if [ "$(date +%s)" -ge "$deadline" ]; then
+                echo "$label deploy timeout (${timeout_seconds}s)" >&2
+                return 1
+              fi
+
+              sleep "$poll_interval_seconds"
+            done
+          }
+
+          wait_render_deploy "${{ secrets.RENDER_SERVICE_ID_BACK_QA }}" "${{ steps.trigger-back-qa.outputs.deploy_id }}" "Back QA"
+          wait_render_deploy "${{ secrets.RENDER_SERVICE_ID_FRONT_QA }}" "${{ steps.trigger-front-qa.outputs.deploy_id }}" "Front QA"
+
+      - name: Health check QA
         run: |
           for i in {1..20}; do
             code=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.BACK_QA_URL }}/health" || true)
@@ -303,24 +414,109 @@ jobs:
           test -d artifacts/front-dist
           test -d artifacts/back-dist
           echo "Artifacts from CI run ${{ needs.resolve-run.outputs.source_run_id }} ready"
+          echo "Deploying commit SHA: ${{ needs.resolve-run.outputs.source_sha }}"
 
-      - name: Trigger Render deploy (Back PROD)
+      - name: Verify Render secrets for PROD
         run: |
-          curl --fail --show-error --silent \
-            -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID_BACK_PROD }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{}'
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_BACK_PROD }}" ] || [ -z "${{ secrets.RENDER_DEPLOY_HOOK_FRONT_PROD }}" ]; then
+            echo "Faltan secrets para deploy deterministico PROD: RENDER_DEPLOY_HOOK_BACK_PROD y/o RENDER_DEPLOY_HOOK_FRONT_PROD" >&2
+            exit 1
+          fi
+          if [ -z "${{ secrets.RENDER_API_KEY }}" ] || [ -z "${{ secrets.RENDER_SERVICE_ID_BACK_PROD }}" ] || [ -z "${{ secrets.RENDER_SERVICE_ID_FRONT_PROD }}" ]; then
+            echo "Faltan secrets para espera de deploy PROD: RENDER_API_KEY, RENDER_SERVICE_ID_BACK_PROD y/o RENDER_SERVICE_ID_FRONT_PROD" >&2
+            exit 1
+          fi
+          if [ -z "${{ secrets.BACK_PROD_URL }}" ]; then
+            echo "Falta BACK_PROD_URL para health check PROD" >&2
+            exit 1
+          fi
 
-      - name: Trigger Render deploy (Front PROD)
+      - name: Trigger Render deploy (Back PROD pinned to CI SHA)
+        id: trigger-back-prod
         run: |
-          curl --fail --show-error --silent \
-            -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID_FRONT_PROD }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{}'
+          BACK_HOOK="${{ secrets.RENDER_DEPLOY_HOOK_BACK_PROD }}"
+          SEP='?'
+          if [[ "$BACK_HOOK" == *\?* ]]; then
+            SEP='&'
+          fi
+          RESPONSE=$(curl --fail --show-error --silent -X POST \
+            "${BACK_HOOK}${SEP}ref=${{ needs.resolve-run.outputs.source_sha }}")
+          DEPLOY_ID=$(printf '%s' "$RESPONSE" | tr -d '\n' | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/^"id"[[:space:]]*:[[:space:]]*"([^"]+)"$/\1/')
+          if [ -z "$DEPLOY_ID" ]; then
+            echo "No se pudo obtener deploy_id para Back PROD desde Deploy Hook." >&2
+            echo "Respuesta hook: $RESPONSE" >&2
+            exit 1
+          fi
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+          echo "Back PROD deploy_id: $DEPLOY_ID"
 
-      - name: Wait and health check PROD
+      - name: Trigger Render deploy (Front PROD pinned to CI SHA)
+        id: trigger-front-prod
+        run: |
+          FRONT_HOOK="${{ secrets.RENDER_DEPLOY_HOOK_FRONT_PROD }}"
+          SEP='?'
+          if [[ "$FRONT_HOOK" == *\?* ]]; then
+            SEP='&'
+          fi
+          RESPONSE=$(curl --fail --show-error --silent -X POST \
+            "${FRONT_HOOK}${SEP}ref=${{ needs.resolve-run.outputs.source_sha }}")
+          DEPLOY_ID=$(printf '%s' "$RESPONSE" | tr -d '\n' | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/^"id"[[:space:]]*:[[:space:]]*"([^"]+)"$/\1/')
+          if [ -z "$DEPLOY_ID" ]; then
+            echo "No se pudo obtener deploy_id para Front PROD desde Deploy Hook." >&2
+            echo "Respuesta hook: $RESPONSE" >&2
+            exit 1
+          fi
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+          echo "Front PROD deploy_id: $DEPLOY_ID"
+
+      - name: Wait for Render deploy completion PROD (back + front)
+        run: |
+          wait_render_deploy() {
+            local service_id="$1"
+            local deploy_id="$2"
+            local label="$3"
+            local timeout_seconds=600
+            local poll_interval_seconds=10
+            local deadline=$(( $(date +%s) + timeout_seconds ))
+
+            while true; do
+              RESPONSE=$(curl --fail --show-error --silent \
+                -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+                -H "Accept: application/json" \
+                "https://api.render.com/v1/services/${service_id}/deploys/${deploy_id}")
+
+              STATUS=$(printf '%s' "$RESPONSE" | tr -d '\n' | grep -oE '"status"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n1 | sed -E 's/^"status"[[:space:]]*:[[:space:]]*"([^"]+)"$/\1/' | tr '[:upper:]' '[:lower:]')
+              if [ -z "$STATUS" ]; then
+                echo "$label: no se pudo leer status del deploy." >&2
+                echo "$label response: $RESPONSE" >&2
+                return 1
+              fi
+
+              echo "$label status=$STATUS (deploy_id=$deploy_id)"
+              case "$STATUS" in
+                live|deployed|update_succeeded|build_succeeded|succeeded|success)
+                  echo "$label deploy completo"
+                  return 0
+                  ;;
+                failed|build_failed|update_failed|error|canceled|cancelled|deactivated)
+                  echo "$label deploy fallo con estado final: $STATUS" >&2
+                  return 1
+                  ;;
+              esac
+
+              if [ "$(date +%s)" -ge "$deadline" ]; then
+                echo "$label deploy timeout (${timeout_seconds}s)" >&2
+                return 1
+              fi
+
+              sleep "$poll_interval_seconds"
+            done
+          }
+
+          wait_render_deploy "${{ secrets.RENDER_SERVICE_ID_BACK_PROD }}" "${{ steps.trigger-back-prod.outputs.deploy_id }}" "Back PROD"
+          wait_render_deploy "${{ secrets.RENDER_SERVICE_ID_FRONT_PROD }}" "${{ steps.trigger-front-prod.outputs.deploy_id }}" "Front PROD"
+
+      - name: Health check PROD
         run: |
           for i in {1..20}; do
             code=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.BACK_PROD_URL }}/health" || true)

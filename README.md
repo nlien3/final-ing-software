@@ -131,10 +131,12 @@ Workflow: `.github/workflows/release.yml`
 
 - Trigger automatico: cuando finaliza exitosamente `CI` en `main`.
 - Trigger manual: `workflow_dispatch` con `source_run_id`.
+- El release resuelve `source_sha` desde ese run y despliega QA/PROD fijando `ref=<source_sha>` (promocion deterministica sin drift).
+- En QA y PROD el workflow espera estado final de deploy de Render (back + front) consultando API por `deploy_id` antes de continuar.
 - Stages:
   1. `Deploy QA`
   2. `Deploy Production` (con aprobacion manual via Environment protection)
-- Health checks:
+- Health checks (despues de confirmar deploy finalizado):
   - QA: `${BACK_QA_URL}/health`
   - PROD: `${BACK_PROD_URL}/health`
 - Post-deploy QA:
@@ -154,6 +156,10 @@ Workflow: `.github/workflows/rollback.yml`
 
 Configurar en `Settings -> Secrets and variables -> Actions`:
 
+- `RENDER_DEPLOY_HOOK_BACK_QA`
+- `RENDER_DEPLOY_HOOK_FRONT_QA`
+- `RENDER_DEPLOY_HOOK_BACK_PROD`
+- `RENDER_DEPLOY_HOOK_FRONT_PROD`
 - `RENDER_API_KEY`
 - `RENDER_SERVICE_ID_BACK_QA`
 - `RENDER_SERVICE_ID_FRONT_QA`

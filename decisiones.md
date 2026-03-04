@@ -54,12 +54,13 @@ Workflow release: `.github/workflows/release.yml`
 
 - Trigger automatico por `workflow_run` exitoso de `CI` sobre `main`
 - Trigger manual por `workflow_dispatch` (permite seleccionar `source_run_id`)
-- `Deploy QA` -> deploy back/front QA en Render + health check + Cypress E2E post-deploy contra QA
-- `Deploy Production` -> deploy back/front PROD + health check
+- El workflow resuelve `source_sha` del run CI y despliega en Render con `ref=<source_sha>` para promover exactamente el commit aprobado.
+- `Deploy QA` -> deploy back/front QA en Render + espera de estado final de deploy en Render (back/front) + health check + Cypress E2E post-deploy contra QA
+- `Deploy Production` -> deploy back/front PROD + espera de estado final de deploy en Render (back/front) + health check
 
 ### Conexion con pipeline de build
 
-El release descarga artefactos del run CI (`front-dist`, `back-dist`) usando `source_run_id` antes de desplegar, garantizando trazabilidad CI -> CD.
+El release descarga artefactos del run CI (`front-dist`, `back-dist`) usando `source_run_id` y usa el `source_sha` del mismo run para desplegar de forma deterministica a QA y luego a PROD.
 
 ## 5. Aprobaciones manuales y gates
 
@@ -78,7 +79,7 @@ Se valida endpoint:
 - QA: `${BACK_QA_URL}/health`
 - PROD: `${BACK_PROD_URL}/health`
 
-El workflow falla si no obtiene `HTTP 200` en los reintentos configurados.
+Antes del health check, el workflow espera explicitamente a que el deploy quede en estado final en Render para back y front (timeout de 10 minutos por servicio). Luego valida `HTTP 200`.
 
 ## 7. Rollback strategy
 
@@ -92,8 +93,12 @@ Objetivo: reducir tiempo de recuperacion ante despliegue defectuoso.
 
 ## 8. Variables y secretos por entorno
 
-Secrets requeridos en GitHub Actions:
+Secrets requeridos en GitHub Actions para release:
 
+- `RENDER_DEPLOY_HOOK_BACK_QA`
+- `RENDER_DEPLOY_HOOK_FRONT_QA`
+- `RENDER_DEPLOY_HOOK_BACK_PROD`
+- `RENDER_DEPLOY_HOOK_FRONT_PROD`
 - `RENDER_API_KEY`
 - `RENDER_SERVICE_ID_BACK_QA`
 - `RENDER_SERVICE_ID_FRONT_QA`
